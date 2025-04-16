@@ -37,6 +37,17 @@
                     </select>
                 </div>
                 
+                <div class="voice-section">
+                    <h3>Voice Options</h3>
+                    <div class="toggle-control">
+                        <label for="tts-toggle">Text-to-Speech</label>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="tts-toggle" checked>
+                            <label for="tts-toggle"></label>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="about-section">
                     <h3>About</h3>
                     <p>TealStor helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
@@ -64,6 +75,9 @@
             
             <div class="chat-input-container">
                 <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
+                <button id="voice-input-button" class="voice-button" title="Speak your question">
+                    <i class="fas fa-microphone"></i>
+                </button>
                 <button id="send-button" disabled>
                     <i class="fas fa-paper-plane"></i>
                 </button>
@@ -73,4 +87,4 @@
     
     <script src="/static/js/script.js"></script>
 </body>
-</html> 
+</html>
