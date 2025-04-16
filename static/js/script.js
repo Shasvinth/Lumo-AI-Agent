@@ -8,6 +8,7 @@ const statusText = document.getElementById('status-text');
 const statusDot = document.getElementById('status-dot');
 const voiceInputButton = document.getElementById('voice-input-button');
 const ttsToggle = document.getElementById('tts-toggle');
+const darkModeToggle = document.getElementById('dark-mode-toggle');
 
 // State
 let isProcessing = false;
@@ -17,6 +18,7 @@ let isRecording = false;
 let recognition = null;
 let speechSynthesis = window.speechSynthesis;
 let ttsEnabled = true;
+let darkModeEnabled = false;
 
 // Initialize speech recognition if browser supports it
 function initSpeechRecognition() {
@@ -111,6 +113,7 @@ sendButton.addEventListener('click', handleSend);
 languageSelector.addEventListener('change', handleLanguageChange);
 voiceInputButton.addEventListener('click', toggleSpeechRecognition);
 ttsToggle.addEventListener('change', toggleTextToSpeech);
+darkModeToggle.addEventListener('click', toggleDarkMode);
 
 // Auto-resize textarea
 userInput.addEventListener('input', function() {
@@ -360,11 +363,47 @@ function enableChat() {
     userInput.placeholder = `Ask a question about ${currentFile.name}...`;
 }
 
+function toggleDarkMode() {
+    // Update darkModeEnabled state
+    darkModeEnabled = !darkModeEnabled;
+    
+    // Toggle dark mode class on root element
+    if (darkModeEnabled) {
+        document.documentElement.classList.add('dark-mode');
+        localStorage.setItem('darkMode', 'enabled');
+        // Change icon to sun when in dark mode
+        document.querySelector('#dark-mode-toggle i').classList.remove('fa-moon');
+        document.querySelector('#dark-mode-toggle i').classList.add('fa-sun');
+    } else {
+        document.documentElement.classList.remove('dark-mode');
+        localStorage.setItem('darkMode', 'disabled');
+        // Change icon to moon when in light mode
+        document.querySelector('#dark-mode-toggle i').classList.remove('fa-sun');
+        document.querySelector('#dark-mode-toggle i').classList.add('fa-moon');
+    }
+}
+
+// Function to load user preference for dark mode
+function loadDarkModePreference() {
+    const darkMode = localStorage.getItem('darkMode');
+    
+    if (darkMode === 'enabled') {
+        darkModeEnabled = true;
+        document.documentElement.classList.add('dark-mode');
+        // Update icon to sun when loading in dark mode
+        document.querySelector('#dark-mode-toggle i').classList.remove('fa-moon');
+        document.querySelector('#dark-mode-toggle i').classList.add('fa-sun');
+    }
+}
+
 // Initialize
 userInput.disabled = true;
 userInput.placeholder = 'Please upload a textbook first...';
 selectedLanguage = languageSelector.value;
 ttsEnabled = ttsToggle.checked;
 
-// Initialize speech recognition when the page loads
-document.addEventListener('DOMContentLoaded', initSpeechRecognition);
+// Initialize speech recognition and load dark mode preference when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    initSpeechRecognition();
+    loadDarkModePreference();
+});
