@@ -1,51 +1,55 @@
-# RAG Chatbot System with Google Gemini
+# TealStor - Multilingual Textbook Q&A
 
-This repository contains a complete implementation of a Retrieval-Augmented Generation (RAG) system for question answering using Google's Gemini API. The system processes PDF documents, creates embeddings, and generates accurate answers to user queries based on the document content.
+A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questions about textbooks in English, Tamil, and Sinhala.
 
-## System Overview
+## Features
 
-The RAG system consists of three main components:
+- **Upload PDF textbooks**: Process and chunk textbooks for semantic search
+- **Multilingual support**: Ask questions in English, Tamil, or Sinhala
+- **Forced language output**: Get responses in your selected language regardless of input language
+- **Smart retrieval**: Find the most relevant textbook sections to answer your questions
+- **Source attribution**: See which sections and pages the answers come from
+- **Modern chatbot UI**: Clean, responsive interface for easy interaction
 
-1. **PDF Processing**: Extracts text from PDF documents and splits it into manageable chunks.
-2. **Vector Store Building**: Creates embeddings for text chunks and builds a vector database for similarity search.
-3. **Query Processing**: Retrieves relevant context for a query, generates answers using Gemini, and provides source information.
+## Project Structure
 
-## Architecture
+```
+├── app.py                    # Main Flask application
+├── components/               # Core components
+│   ├── __init__.py           # Package initialization
+│   ├── embedding_store.py    # Embedding generation and storage
+│   ├── pdf_processor.py      # PDF processing module
+│   ├── rag_processor.py      # Query processing and response generation
+│   └── utils.py              # Utility functions
+├── static/                   # Static files
+│   ├── css/                  # CSS stylesheets
+│   │   └── styles.css        # Main stylesheet
+│   └── js/                   # JavaScript files
+│       └── script.js         # Main client-side script
+├── templates/                # HTML templates
+│   └── index.html            # Main page template
+├── uploads/                  # Uploaded files
+├── data/                     # Data files
+│   └── output/               # Generated data files
+└── requirements.txt          # Project dependencies
+```
 
-![RAG Architecture](https://i.imgur.com/ePtLqEY.png)
+## Requirements
 
-The system follows these steps:
-1. Extract text from the PDF and split into chunks with metadata
-2. Generate embeddings for each chunk using Google's Gemini API
-3. Store embeddings in a FAISS vector index for efficient retrieval
-4. When a query is received, find the most relevant chunks
-5. Construct a prompt with the query and relevant context
-6. Generate an answer using Gemini LLM
-7. Return the answer with source information (sections and page numbers)
-
-## Files Structure
-
-- `main.py`: Main entry point that orchestrates the complete RAG pipeline
-- `pdf_processor.py`: Handles PDF text extraction and chunking
-- `embedding_store.py`: Manages text embeddings and vector database using Gemini API
-- `rag_processor.py`: Processes queries, retrieves context, and generates answers
-- `utils.py`: Contains utility functions for progress tracking and error handling
-- `app.py`: Web application for interacting with the RAG system
-- `run.py`: Command-line interface for the system
-
-## Setup and Usage
-
-### Prerequisites
-
-- Python 3.8 or higher
+- Python 3.10 or higher
+- Flask
 - Google Gemini API key
+- PyPDF2
+- FAISS for vector storage
+- langdetect
+- deep-translator
 
-### Installation
+## Setup
 
 1. Clone the repository:
    ```
    git clone <repository-url>
-   cd <repository-directory>
+   cd TealStor
    ```
 
 2. Install dependencies:
@@ -53,130 +57,51 @@ The system follows these steps:
    pip install -r requirements.txt
    ```
 
-3. Create a `.env` file with your Gemini API key:
+3. Set up your environment variables:
    ```
-   GEMINI_API_KEY=your_api_key_here
+   export GEMINI_API_KEY="your-gemini-api-key"
    ```
-
-### Usage
-
-#### Complete Pipeline
-
-Run the complete RAG pipeline (PDF processing, vector store building, and query processing):
-
-```
-python main.py --pdf your_textbook.pdf --queries queries.json --output-csv results.csv
-```
-
-#### Individual Steps
-
-1. Process a PDF document:
+   Or create a `.env` file with:
    ```
-   python pdf_processor.py your_textbook.pdf
+   GEMINI_API_KEY=your-gemini-api-key
    ```
 
-2. Build the vector store:
-   ```
-   python embedding_store.py chunks.json
-   ```
+## Running the Application
 
-3. Process queries:
+1. Start the Flask server:
    ```
-   python rag_processor.py queries.json
+   python app.py
    ```
 
-#### Web Interface
+2. Open your browser and navigate to:
+   ```
+   http://localhost:5000
+   ```
 
-Run the web application:
+3. Upload a PDF textbook using the interface
 
-```
-python app.py
-```
+4. Start asking questions in any language (English, Tamil, or Sinhala)
 
-Then open your browser at `http://localhost:5000`
+5. Receive answers in your selected language, regardless of input language
 
-## Technical Details
+## How It Works
 
-### PDF Processing
+1. **PDF Processing**: When you upload a PDF, it's processed into smaller chunks with metadata about sections and page numbers.
 
-The PDF processing module extracts text from PDF files and splits it into overlapping chunks. It maintains metadata for each chunk, including:
-- Page number
-- Section title
-- Chunk text
+2. **Vector Database Building**: Text chunks are converted into vector embeddings using Google's Gemini embedding API and stored in a FAISS index.
 
-This information is used to provide source attribution in the generated answers.
-
-### Embedding Generation
-
-The system uses Google's Gemini embedding model (`models/embedding-001`) to create vector representations of text chunks. Features include:
-- Batch processing to optimize API calls
-- Retry mechanism with exponential backoff for reliability
-- Error handling with fallback options
-
-### Vector Search
-
-FAISS (Facebook AI Similarity Search) is used for efficient vector similarity search:
-- Uses L2 distance for similarity calculation
-- Exact search with IndexFlatL2 for accuracy
-- ID mapping to track which embedding corresponds to which chunk
-
-### RAG Implementation
-
-The RAG processor:
-1. Retrieves the top-k most similar chunks for a query
-2. Extracts metadata (sections and page numbers)
-3. Constructs a prompt that includes the query and context chunks
-4. Generates an answer using Gemini
-5. Returns the answer with source information
-
-## Advanced Features
-
-- **Memory Management**: Garbage collection and memory-efficient mode for processing large documents
-- **Rate Limiting**: Implements delays and backoff strategies to comply with API limits
-- **Error Recovery**: Retry mechanisms for API failures and intermediate result saving
-- **Progress Tracking**: Visual progress indicators for long-running operations
-
-## Customization
-
-### Embedding Parameters
-
-You can customize the embedding parameters in `embedding_store.py`:
-- Change the model in `genai.embed_content` (default: "models/embedding-001")
-- Adjust the task_type parameter (default: "retrieval_query")
-- Modify the batch size for embedding generation (default: 10)
-
-### RAG Parameters
-
-Customize the RAG behavior in `rag_processor.py`:
-- Adjust the number of context chunks retrieved (top_k parameter)
-- Modify the prompt template for different response styles
-- Change the Gemini model parameters for answer generation
-
-## Troubleshooting
-
-### Common Issues
-
-1. **API Key Issues**: Ensure your Gemini API key is correct and has the necessary permissions.
-2. **Embedding Failures**: If embeddings fail to generate, check the API response using the logging information.
-3. **Out of Memory**: For large documents, use the `--memory-efficient` flag to reduce memory usage.
-
-### Debug Tools
-
-- Run `python test_embedding_api.py` to test Gemini API connectivity
-- Check the logs for detailed error information
-- Set environment variables to control logging levels
+3. **Query Processing**: When you ask a question, the system:
+   - Detects the language of your input
+   - Translates it to English for searching if necessary
+   - Finds the most relevant textbook chunks
+   - Constructs a prompt with these chunks
+   - Generates a response using Gemini API
+   - Translates the response to your selected language
 
 ## License
 
-[License information here]
+[Add your license information here]
 
-## Acknowledgments
+## Credits
 
-- Google Generative AI for the Gemini models
-- Facebook Research for FAISS
-
-## References
-
-- [Google Generative AI Documentation](https://ai.google.dev/)
-- [FAISS Documentation](https://github.com/facebookresearch/faiss)
-- [RAG Paper](https://arxiv.org/abs/2005.11401) - Lewis et al., "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" 
+Developed by [Your Name] 

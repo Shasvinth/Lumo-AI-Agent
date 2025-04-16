@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TealStor - Multilingual Textbook Q&A</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>📚 TealStor</h1>
+                <p>Multilingual Textbook Q&A</p>
+            </div>
+            
+            <div class="sidebar-content">
+                <div class="upload-section">
+                    <h3>Upload Textbook</h3>
+                    <div class="file-upload">
+                        <input type="file" id="pdf-upload" accept=".pdf" />
+                        <label for="pdf-upload">
+                            <i class="fas fa-file-pdf"></i>
+                            <span>Choose PDF</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="language-section">
+                    <h3>Select Language</h3>
+                    <select id="language-selector">
+                        <option value="en">English</option>
+                        <option value="ta">Tamil</option>
+                        <option value="si">Sinhala</option>
+                    </select>
+                </div>
+                
+                <div class="about-section">
+                    <h3>About</h3>
+                    <p>TealStor helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Chat Area -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2>Textbook Q&A</h2>
+                <div class="status-indicator">
+                    <span id="status-text">Ready</span>
+                    <div id="status-dot"></div>
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages">
+                <div class="message system">
+                    <div class="message-content">
+                        Welcome to TealStor! Please upload a textbook to get started.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
+                <button id="send-button" disabled>
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/script.js"></script>
+</body>
+</html> 
