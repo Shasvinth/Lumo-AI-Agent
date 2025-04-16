@@ -77,7 +77,7 @@ function handleFileUpload(event) {
             updateStatus('Ready', 'success');
             enableChat();
             const languageName = getLanguageName(selectedLanguage);
-            addMessage('system', `PDF processed successfully! You can now ask questions about the textbook in ${languageName}.`);
+            addMessage('system', `PDF processed successfully! You can now ask questions about ${currentFile.name} in ${languageName}.`);
         } else {
             throw new Error(data.error || 'Failed to process PDF');
         }
@@ -202,10 +202,10 @@ function showError(message) {
 
 function enableChat() {
     userInput.disabled = false;
-    userInput.placeholder = 'Ask a question about the textbook...';
+    userInput.placeholder = `Ask a question about ${currentFile.name}...`;
 }
 
 // Initialize
 userInput.disabled = true;
 userInput.placeholder = 'Please upload a textbook first...';
-selectedLanguage = languageSelector.value; 
+selectedLanguage = languageSelector.value;
