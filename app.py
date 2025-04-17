@@ -1,7 +1,7 @@
 """
-Web Interface for TealStor Multilingual Textbook Q&A
+Web Interface for Lumo Multilingual Textbook Q&A
 
-This module provides a Flask web application for the TealStor system.
+This module provides a Flask web application for the Lumo system.
 It handles file uploads, query processing, and serving the web interface.
 """
 
@@ -128,4 +128,4 @@ def process_query():
         return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    app.run(debug=True, port=5000)
