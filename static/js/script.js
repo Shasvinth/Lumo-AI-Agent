@@ -10,6 +10,18 @@ const voiceInputButton = document.getElementById('voice-input-button');
 const ttsToggle = document.getElementById('tts-toggle');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
 
+// Initialize markdown-it
+const md = window.markdownit({
+    html: false,        // Disable HTML tags
+    breaks: true,       // Convert '\n' to <br>
+    linkify: true,      // Autoconvert URLs to links
+    typographer: true,  // Enable smartquotes and other typographic replacements
+    highlight: function (str, lang) {
+        // Optional syntax highlighting
+        return `<code class="language-${lang}">${str}</code>`;
+    }
+});
+
 // State
 let isProcessing = false;
 let currentFile = null;
@@ -276,7 +288,8 @@ function handleSend() {
         },
         body: JSON.stringify({
             query: message,
-            language: languageSelector.value
+            language: languageSelector.value,
+            use_markdown: true // Enable markdown formatting
         })
     })
     .then(response => {
@@ -291,7 +304,8 @@ function handleSend() {
             addMessage('assistant', data.answer, {
                 sections: data.sections,
                 pages: data.pages,
-                language: data.language
+                language: data.language,
+                format: data.format || 'plain' // Use the format provided by the server
             });
             updateStatus('Ready', 'success');
             
@@ -319,7 +333,17 @@ function addMessage(type, content, metadata = null) {
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.textContent = content;
+    
+    // Check if the content should be rendered as Markdown (only for assistant messages)
+    if (type === 'assistant' && metadata && metadata.format === 'markdown') {
+        // Render content as Markdown
+        contentDiv.innerHTML = md.render(content);
+        contentDiv.classList.add('markdown-content');
+    } else {
+        // Render as plain text with line breaks
+        contentDiv.textContent = content;
+    }
+    
     messageDiv.appendChild(contentDiv);
     
     if (metadata) {

@@ -30,6 +30,8 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 # Initialize RAG processor
 rag_processor = None
+# Default to enable markdown formatting
+MARKDOWN_ENABLED = True
 
 def translate_to_language(text, target_lang):
     """Translate text to target language"""
@@ -99,6 +101,7 @@ def process_query():
     data = request.json
     query = data.get('query')
     selected_language = data.get('language', 'en')
+    use_markdown = data.get('use_markdown', MARKDOWN_ENABLED)
     
     if not query:
         return jsonify({'success': False, 'error': 'No query provided'})
@@ -108,7 +111,8 @@ def process_query():
         result = rag_processor.process_query(
             "user_query",
             query,
-            top_k=5
+            top_k=5,
+            use_markdown=use_markdown
         )
         
         # Force translate answer to selected language regardless of detected language
@@ -122,7 +126,8 @@ def process_query():
             'answer': answer,
             'sections': result['Sections'],
             'pages': result['Pages'],
-            'language': selected_language  # Return selected language, not detected
+            'language': selected_language,  # Return selected language, not detected
+            'format': 'markdown' if use_markdown else 'plain'  # Indicate response format
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
