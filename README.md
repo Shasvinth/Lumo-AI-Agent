@@ -1,4 +1,4 @@
-# TealStor - Multilingual Textbook Q&A
+# Lumo - Multilingual Textbook Q&A
 
 A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questions about textbooks in English, Tamil, and Sinhala.
 
@@ -47,12 +47,14 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 ## Setup
 
 1. Clone the repository:
+
    ```
    git clone <repository-url>
-   cd TealStor
+   cd Lumo
    ```
 
 2. Install dependencies:
+
    ```
    pip install -r requirements.txt
    ```
@@ -69,11 +71,13 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 ## Running the Application
 
 1. Start the Flask server:
+
    ```
    python app.py
    ```
 
 2. Open your browser and navigate to:
+
    ```
    http://localhost:5000
    ```
@@ -104,4 +108,4 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 
 ## Credits
 
-Developed by [Your Name] 
+Developed by [Your Name]

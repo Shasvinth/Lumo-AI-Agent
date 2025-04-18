@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TealStor - Multilingual Textbook Q&A</title>
+    <title>Lumo - Multilingual Textbook Q&A</title>
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Add markdown-it library for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
 </head>
 <body>
     <div class="app-container">
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h1>📚 TealStor</h1>
+                <h1>📚 Lumo</h1>
                 <p>Multilingual Textbook Q&A</p>
             </div>
             
@@ -37,9 +39,20 @@
                     </select>
                 </div>
                 
+                <div class="voice-section">
+                    <h3>Voice Options</h3>
+                    <div class="toggle-control">
+                        <label for="tts-toggle">Text-to-Speech</label>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="tts-toggle" checked>
+                            <label for="tts-toggle"></label>
+                        </div>
+                    </div>
+                </div>
+                
                 <div class="about-section">
                     <h3>About</h3>
-                    <p>TealStor helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
+                    <p>Lumo helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
                 </div>
             </div>
         </div>
@@ -48,22 +61,31 @@
         <div class="chat-container">
             <div class="chat-header">
                 <h2>Textbook Q&A</h2>
-                <div class="status-indicator">
-                    <span id="status-text">Ready</span>
-                    <div id="status-dot"></div>
+                <div class="header-controls">
+                    <!-- Theme Toggle Button (Moved to header) -->
+                    <button id="dark-mode-toggle" class="theme-toggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="status-indicator">
+                        <span id="status-text">Ready</span>
+                        <div id="status-dot"></div>
+                    </div>
                 </div>
             </div>
             
             <div class="chat-messages" id="chat-messages">
                 <div class="message system">
                     <div class="message-content">
-                        Welcome to TealStor! Please upload a textbook to get started.
+                        Welcome to Lumo! Please upload a textbook to get started.
                     </div>
                 </div>
             </div>
             
             <div class="chat-input-container">
                 <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
+                <button id="voice-input-button" class="voice-button" title="Speak your question">
+                    <i class="fas fa-microphone"></i>
+                </button>
                 <button id="send-button" disabled>
                     <i class="fas fa-paper-plane"></i>
                 </button>
@@ -73,4 +95,4 @@
     
     <script src="/static/js/script.js"></script>
 </body>
-</html> 
+</html>

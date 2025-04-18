@@ -165,7 +165,7 @@ class RAGProcessor:
             print_warning(f"Translation failed: {str(e)}")
             return text
             
-    def construct_prompt(self, query, contexts, max_tokens=8000, target_lang='en'):
+    def construct_prompt(self, query, contexts, max_tokens=8000, target_lang='en', use_markdown=False):
         """
         Construct RAG prompt with query and contexts
         
@@ -174,6 +174,7 @@ class RAGProcessor:
             contexts (list): List of context chunks
             max_tokens (int): Maximum tokens in the prompt
             target_lang (str): Target language for the response
+            use_markdown (bool): Whether to format the output with Markdown
             
         Returns:
             str: Formatted prompt for the LLM
@@ -199,12 +200,26 @@ class RAGProcessor:
             
         combined_context = "\n\n---\n\n".join(context_texts)
         
+        # Markdown formatting instructions
+        markdown_instructions = ""
+        if use_markdown:
+            markdown_instructions = """
+Format your answer using Markdown syntax:
+- Use # for main headings and ## for subheadings
+- Use **bold** for emphasis on important terms
+- Use bullet points (- ) for lists of items
+- Use numbered lists (1. 2. 3.) for sequential information
+- Use > for quotes or important definitions
+- Use code blocks for any mathematical formulas or special notation
+"""
+        
         # Construct prompt template based on target language
         if target_lang == 'en':
             prompt = f"""Using the following textbook content, answer the question below. 
 Your answer should be comprehensive but focused on the question.
 Provide specific historical details, events, and explanations based on the textbook content.
 If the answer cannot be found in the provided context, say so clearly.
+{markdown_instructions}
 
 Context:
 {combined_context}
@@ -218,6 +233,7 @@ Answer:"""
 உங்கள் பதில் விரிவானதாக இருக்க வேண்டும், ஆனால் கேள்வியில் கவனம் செலுத்த வேண்டும்.
 பாடப்புத்தக உள்ளடக்கத்தின் அடிப்படையில் குறிப்பிட்ட வரலாற்று விவரங்கள், நிகழ்வுகள் மற்றும் விளக்கங்களை வழங்கவும்.
 பதிலை வழங்கப்பட்ட சூழலில் கண்டறிய முடியவில்லை என்றால், அதை தெளிவாக கூறவும்.
+{markdown_instructions}
 
 சூழல்:
 {combined_context}
@@ -231,6 +247,7 @@ Answer:"""
 ඔබේ පිළිතුර සවිස්තරාත්මක විය යුතුය, නමුත් ප්‍රශ්නය කෙරෙහි අවධානය යොමු කළ යුතුය.
 පෙළ පොතේ අන්තර්ගතය මත පදනම්ව නිශ්චිත ඉතිහාසික විස්තර, සිදුවීම් සහ පැහැදිලි කිරීම් සපයන්න.
 පිළිතුර සපයන ලද සන්දර්භයේ සොයාගත නොහැකි නම්, එය පැහැදිලිව පවසන්න.
+{markdown_instructions}
 
 සන්දර්භය:
 {combined_context}
@@ -264,7 +281,7 @@ Answer:"""
                 
         return list(sections), sorted(list(pages))
     
-    def process_query(self, query_id, query_text, top_k=5):
+    def process_query(self, query_id, query_text, top_k=5, use_markdown=False):
         """
         Process a single query
         
@@ -272,6 +289,7 @@ Answer:"""
             query_id (str): Query ID
             query_text (str): Query text
             top_k (int): Number of contexts to retrieve
+            use_markdown (bool): Whether to format the output with Markdown
         
         Returns:
             dict: Dict with query results
@@ -298,7 +316,7 @@ Answer:"""
             sections_str, pages_str = format_metadata(sections, pages)
             
             # Build prompt in detected language
-            prompt = self.construct_prompt(query_text, contexts, target_lang=query_lang)
+            prompt = self.construct_prompt(query_text, contexts, target_lang=query_lang, use_markdown=use_markdown)
             
             # Generate answer with retry mechanism
             max_retries = 3
@@ -454,4 +472,4 @@ if __name__ == "__main__":
         args.chunks
     )
     
-    processor.process_queries_file(args.queries_path, args.output, args.top_k) 
+    processor.process_queries_file(args.queries_path, args.output, args.top_k)
