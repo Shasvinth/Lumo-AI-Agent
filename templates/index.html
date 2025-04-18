@@ -10,25 +10,93 @@
 </head>
 <body>
     <div class="app-container">
-        <div class="glass-panel left-panel">
-            <div class="logo-container">
-                <div class="logo">📚</div>
-                <div class="app-title">Lumo</div>
+        <!-- Main Chat Area -->
+        <div class="chat-panel">
+            <!-- Header with status and controls -->
+            <div class="chat-header">
+                <div class="app-branding">
+                    <div class="logo">📚</div>
+                    <h1 class="app-title">Lumo</h1>
+                </div>
+                <div class="header-controls">
+                    <div class="status-indicator">
+                        <div id="status-dot"></div>
+                        <span id="status-text">Ready</span>
+                    </div>
+                    <button id="dark-mode-toggle" class="icon-button" title="Toggle dark mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
             </div>
             
-            <div class="settings-container">
-                <div class="upload-container glass-card">
-                    <h3><i class="fas fa-file-upload"></i> Upload Textbook</h3>
-                    <div class="upload-area">
-                        <input type="file" id="pdf-upload" accept=".pdf" />
-                        <label for="pdf-upload">
-                            <i class="fas fa-file-pdf"></i>
-                            <span>Choose PDF</span>
-                        </label>
+            <!-- Upload Button (displayed only when no PDF is uploaded) -->
+            <div id="upload-container" class="upload-container">
+                <button id="upload-button" class="upload-button">
+                    <i class="fas fa-file-upload"></i>
+                    <span>Upload Textbook</span>
+                </button>
+                <input type="file" id="pdf-upload" accept=".pdf" hidden />
+            </div>
+            
+            <!-- Chat Messages -->
+            <div class="chat-content" id="chat-messages">
+                <div class="chat-bubble system">
+                    <div class="bubble-content">
+                        Welcome to Lumo! Upload a textbook to start asking questions about it.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Input Area -->
+            <div class="chat-input-area">
+                <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
+                <button id="voice-input-button" class="icon-button" title="Speak your question">
+                    <i class="fas fa-microphone"></i>
+                </button>
+                <button id="send-button" class="icon-button" disabled title="Send message">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Bottom Navigation Bar -->
+        <div class="bottom-nav">
+            <div class="nav-item active" id="nav-chat">
+                <i class="fas fa-comment-dots"></i>
+                <span>Chat</span>
+            </div>
+            <div class="nav-item" id="nav-settings">
+                <i class="fas fa-sliders-h"></i>
+                <span>Settings</span>
+            </div>
+            <div class="nav-item" id="nav-info">
+                <i class="fas fa-info-circle"></i>
+                <span>About</span>
+            </div>
+        </div>
+        
+        <!-- Settings Panel (Hidden by default) -->
+        <div class="settings-panel" id="settings-panel">
+            <div class="panel-header">
+                <h2>Settings</h2>
+                <button class="close-panel" id="close-settings">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="settings-content">
+                <div class="setting-group">
+                    <h3><i class="fas fa-file-pdf"></i> Textbook</h3>
+                    <div id="settings-upload-container">
+                        <p class="file-info" id="current-file-text">No file uploaded</p>
+                        <button id="settings-upload-button" class="upload-button">
+                            <i class="fas fa-file-upload"></i>
+                            <span>Upload Textbook</span>
+                        </button>
                     </div>
                 </div>
                 
-                <div class="language-container glass-card">
+                <div class="setting-group">
                     <h3><i class="fas fa-language"></i> Language</h3>
                     <select id="language-selector">
                         <option value="en">English</option>
@@ -37,58 +105,49 @@
                     </select>
                 </div>
                 
-                <div class="voice-container glass-card">
-                    <h3><i class="fas fa-volume-up"></i> Voice Options</h3>
-                    <div class="voice-option">
-                        <label for="tts-toggle">Text-to-Speech</label>
-                        <div class="toggle-container">
-                            <input type="checkbox" id="tts-toggle" checked>
-                            <div class="toggle-switch">
-                                <div class="toggle-knob"></div>
-                            </div>
+                <div class="setting-group">
+                    <h3><i class="fas fa-volume-up"></i> Text-to-Speech</h3>
+                    <div class="toggle-container">
+                        <input type="checkbox" id="tts-toggle">
+                        <div class="toggle-switch">
+                            <div class="toggle-knob"></div>
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="about-container glass-card">
-                <h3><i class="fas fa-info-circle"></i> About</h3>
-                <p>Lumo helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
+                
+                <div class="setting-group" id="current-file-info">
+                    <h3><i class="fas fa-file-pdf"></i> Current Textbook</h3>
+                    <p class="file-info">No file uploaded</p>
+                </div>
             </div>
         </div>
         
-        <div class="glass-panel right-panel">
-            <div class="chat-header">
-                <h2>Textbook Q&A</h2>
-                <div class="chat-controls">
-                    <button id="dark-mode-toggle" class="mode-toggle" title="Toggle dark mode">
-                        <i class="fas fa-moon"></i>
-                    </button>
-                    <div class="status-badge">
-                        <div id="status-dot"></div>
-                        <span id="status-text">Ready</span>
-                    </div>
-                </div>
+        <!-- About Panel (Hidden by default) -->
+        <div class="about-panel" id="about-panel">
+            <div class="panel-header">
+                <h2>About Lumo</h2>
+                <button class="close-panel" id="close-about">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             
-            <div class="chat-content" id="chat-messages">
-                <div class="chat-bubble system">
-                    <div class="bubble-content">
-                        Welcome to Lumo! Please upload a textbook to get started.
-                    </div>
+            <div class="about-content">
+                <div class="app-logo">📚</div>
+                <h1 class="app-name">Lumo</h1>
+                <p class="app-description">
+                    Lumo is an AI-powered textbook companion that helps students learn from their textbooks in multiple languages.
+                </p>
+                <p class="app-features">
+                    Upload your textbook and ask questions in English, Tamil, or Sinhala. Lumo will find the most relevant information and provide comprehensive answers.
+                </p>
+                <div class="version-info">
+                    <span>Version 1.0</span>
                 </div>
-            </div>
-            
-            <div class="chat-input-area">
-                <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
-                <button id="voice-input-button" title="Speak your question">
-                    <i class="fas fa-microphone"></i>
-                </button>
-                <button id="send-button" disabled title="Send message">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
             </div>
         </div>
+        
+        <!-- Overlay (for mobile panels) -->
+        <div class="overlay" id="overlay"></div>
     </div>
     
     <script src="/static/js/script.js"></script>

@@ -1,5 +1,8 @@
 // DOM Elements
 const pdfUpload = document.getElementById('pdf-upload');
+const uploadContainer = document.getElementById('upload-container');
+const uploadButton = document.getElementById('upload-button');
+const settingsUploadButton = document.getElementById('settings-upload-button');
 const languageSelector = document.getElementById('language-selector');
 const chatMessages = document.getElementById('chat-messages');
 const userInput = document.getElementById('user-input');
@@ -9,6 +12,22 @@ const statusDot = document.getElementById('status-dot');
 const voiceInputButton = document.getElementById('voice-input-button');
 const ttsToggle = document.getElementById('tts-toggle');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
+const currentFileText = document.getElementById('current-file-text');
+const currentFileInfo = document.getElementById('current-file-info');
+
+// Toggle functionality
+const toggleSwitch = document.querySelector('.toggle-switch');
+const toggleKnob = document.querySelector('.toggle-knob');
+
+// Navigation Elements
+const navChat = document.getElementById('nav-chat');
+const navSettings = document.getElementById('nav-settings');
+const navInfo = document.getElementById('nav-info');
+const settingsPanel = document.getElementById('settings-panel');
+const aboutPanel = document.getElementById('about-panel');
+const closeSettings = document.getElementById('close-settings');
+const closeAbout = document.getElementById('close-about');
+const overlay = document.getElementById('overlay');
 
 // Initialize markdown-it
 const md = window.markdownit({
@@ -29,7 +48,7 @@ let selectedLanguage = 'en';
 let isRecording = false;
 let recognition = null;
 let speechSynthesis = window.speechSynthesis;
-let ttsEnabled = true;
+let ttsEnabled = false; // Changed to false by default
 let darkModeEnabled = false;
 
 // Initialize speech recognition if browser supports it
@@ -119,6 +138,8 @@ function speakText(text, language) {
 
 // Event Listeners
 pdfUpload.addEventListener('change', handleFileUpload);
+uploadButton.addEventListener('click', () => pdfUpload.click());
+settingsUploadButton.addEventListener('click', () => pdfUpload.click());
 userInput.addEventListener('input', handleInput);
 userInput.addEventListener('keydown', handleKeyPress);
 sendButton.addEventListener('click', handleSend);
@@ -127,11 +148,103 @@ voiceInputButton.addEventListener('click', toggleSpeechRecognition);
 ttsToggle.addEventListener('change', toggleTextToSpeech);
 darkModeToggle.addEventListener('click', toggleDarkMode);
 
+// Manual toggle click handling (in addition to the checkbox change event)
+document.querySelector('.toggle-switch').addEventListener('click', function() {
+    // Only allow toggle if not disabled
+    if (!ttsToggle.disabled) {
+        // Toggle the checked state
+        ttsToggle.checked = !ttsToggle.checked;
+        
+        // Manually trigger the change event
+        const event = new Event('change');
+        ttsToggle.dispatchEvent(event);
+    }
+});
+
+// Bottom navigation and panel listeners
+navChat.addEventListener('click', showChat);
+navSettings.addEventListener('click', showSettings);
+navInfo.addEventListener('click', showAbout);
+closeSettings.addEventListener('click', hideSettings);
+closeAbout.addEventListener('click', hideAbout);
+overlay.addEventListener('click', hideAllPanels);
+
 // Auto-resize textarea
 userInput.addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
 });
+
+// Panel Navigation Functions
+function showChat() {
+    setActiveNavItem(navChat);
+    hideAllPanels();
+}
+
+function showSettings() {
+    setActiveNavItem(navSettings);
+    settingsPanel.classList.add('active');
+    overlay.classList.add('active');
+    updateFileInfo();
+}
+
+function showAbout() {
+    setActiveNavItem(navInfo);
+    aboutPanel.classList.add('active');
+    overlay.classList.add('active');
+}
+
+function hideSettings() {
+    settingsPanel.classList.remove('active');
+    overlay.classList.remove('active');
+    setActiveNavItem(navChat);
+}
+
+function hideAbout() {
+    aboutPanel.classList.remove('active');
+    overlay.classList.remove('active');
+    setActiveNavItem(navChat);
+}
+
+function hideAllPanels() {
+    settingsPanel.classList.remove('active');
+    aboutPanel.classList.remove('active');
+    overlay.classList.remove('active');
+    setActiveNavItem(navChat);
+}
+
+function setActiveNavItem(item) {
+    // Remove active class from all nav items
+    [navChat, navSettings, navInfo].forEach(el => el.classList.remove('active'));
+    // Add active class to current item
+    item.classList.add('active');
+}
+
+function updateFileInfo() {
+    if (currentFile) {
+        // Update the file info in the settings panel
+        currentFileText.textContent = currentFile.name;
+        
+        // Hide duplicate file info section if it exists
+        if (currentFileInfo) {
+            currentFileInfo.classList.add('hidden');
+        }
+        
+        // Hide the main upload button in chat view
+        uploadContainer.classList.add('hidden');
+    } else {
+        // Show that no file is uploaded
+        currentFileText.textContent = 'No file uploaded';
+        
+        // Show duplicate file info section if it exists
+        if (currentFileInfo) {
+            currentFileInfo.classList.remove('hidden');
+        }
+        
+        // Show the main upload button
+        uploadContainer.classList.remove('hidden');
+    }
+}
 
 // Functions
 function toggleSpeechRecognition() {
@@ -160,7 +273,8 @@ function toggleSpeechRecognition() {
 }
 
 function toggleTextToSpeech(event) {
-    ttsEnabled = event.target.checked;
+    // Set ttsEnabled based on the current checkbox state
+    ttsEnabled = ttsToggle.checked;
     
     // If disabled mid-speech, stop any ongoing speech
     if (!ttsEnabled) {
@@ -169,19 +283,22 @@ function toggleTextToSpeech(event) {
     
     // Update toggle switch visual state for new UI
     updateToggleSwitch();
+    
+    // Save user preference
+    localStorage.setItem('ttsEnabled', ttsEnabled ? 'true' : 'false');
 }
 
 function updateToggleSwitch() {
-    const toggleKnob = document.querySelector('.toggle-knob');
-    const toggleSwitch = document.querySelector('.toggle-switch');
-    
     if (ttsEnabled) {
         toggleSwitch.style.backgroundColor = 'var(--primary-color)';
-        toggleKnob.style.left = '26px';
+        toggleKnob.style.left = '24px';
     } else {
         toggleSwitch.style.backgroundColor = '#e5e7eb';
         toggleKnob.style.left = '2px';
     }
+    
+    // Make sure the checked state matches the enabled state
+    ttsToggle.checked = ttsEnabled;
     
     if (ttsToggle.disabled) {
         toggleSwitch.style.opacity = '0.6';
@@ -196,17 +313,16 @@ function handleLanguageChange(event) {
     selectedLanguage = event.target.value;
     const languageName = getLanguageName(selectedLanguage);
     
-    // Automatically disable text-to-speech for Tamil and Sinhala
+    // Always disable text-to-speech for Tamil and Sinhala
     if (selectedLanguage === 'ta' || selectedLanguage === 'si') {
         ttsEnabled = false;
         ttsToggle.checked = false;
-        // Optionally disable the toggle control
+        // Disable the toggle control
         ttsToggle.disabled = true;
     } else {
-        // Re-enable TTS for English
-        ttsEnabled = true;
-        ttsToggle.checked = true;
+        // English is available, but respect user's choice
         ttsToggle.disabled = false;
+        // Don't change the checked state, keep it as user set it
     }
     
     // Update toggle switch visual state for new UI
@@ -245,6 +361,7 @@ function handleFileUpload(event) {
     
     currentFile = file;
     updateStatus('Processing PDF...', 'warning');
+    updateFileInfo(); // Update UI immediately to show the file is being processed
     
     // Create FormData
     const formData = new FormData();
@@ -267,6 +384,12 @@ function handleFileUpload(event) {
             enableChat();
             const languageName = getLanguageName(selectedLanguage);
             addMessage('system', `PDF processed successfully! You can now ask questions about ${currentFile.name} in ${languageName}.`);
+            
+            // Update file info in settings and hide main upload button
+            updateFileInfo();
+            
+            // Make sure we're on the chat tab after successful upload
+            showChat();
         } else {
             throw new Error(data.error || 'Failed to process PDF');
         }
@@ -274,6 +397,10 @@ function handleFileUpload(event) {
     .catch(error => {
         showError(error.message);
         updateStatus('Error', 'error');
+        
+        // Reset if there was an error
+        currentFile = null;
+        updateFileInfo();
     });
 }
 
@@ -451,10 +578,22 @@ function loadDarkModePreference() {
 userInput.disabled = true;
 userInput.placeholder = 'Please upload a textbook first...';
 selectedLanguage = languageSelector.value;
-ttsEnabled = ttsToggle.checked;
+
+// Get user preference for text-to-speech or default to false
+ttsEnabled = localStorage.getItem('ttsEnabled') === 'true';
+ttsToggle.checked = ttsEnabled;
 
 // Initialize speech recognition and load dark mode preference when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     initSpeechRecognition();
     loadDarkModePreference();
+    
+    // Make sure chat tab is active by default
+    setActiveNavItem(navChat);
+    
+    // Check if currentFile exists and update UI accordingly
+    updateFileInfo();
+    
+    // Initialize the toggle switch to off state
+    updateToggleSwitch();
 });
