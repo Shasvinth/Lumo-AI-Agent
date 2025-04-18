@@ -6,22 +6,20 @@
     <title>Lumo - Multilingual Textbook Q&A</title>
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- Add markdown-it library for Markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">
-                <h1>📚 Lumo</h1>
-                <p>Multilingual Textbook Q&A</p>
+        <div class="glass-panel left-panel">
+            <div class="logo-container">
+                <div class="logo">📚</div>
+                <div class="app-title">Lumo</div>
             </div>
             
-            <div class="sidebar-content">
-                <div class="upload-section">
-                    <h3>Upload Textbook</h3>
-                    <div class="file-upload">
+            <div class="settings-container">
+                <div class="upload-container glass-card">
+                    <h3><i class="fas fa-file-upload"></i> Upload Textbook</h3>
+                    <div class="upload-area">
                         <input type="file" id="pdf-upload" accept=".pdf" />
                         <label for="pdf-upload">
                             <i class="fas fa-file-pdf"></i>
@@ -30,8 +28,8 @@
                     </div>
                 </div>
                 
-                <div class="language-section">
-                    <h3>Select Language</h3>
+                <div class="language-container glass-card">
+                    <h3><i class="fas fa-language"></i> Language</h3>
                     <select id="language-selector">
                         <option value="en">English</option>
                         <option value="ta">Tamil</option>
@@ -39,54 +37,54 @@
                     </select>
                 </div>
                 
-                <div class="voice-section">
-                    <h3>Voice Options</h3>
-                    <div class="toggle-control">
+                <div class="voice-container glass-card">
+                    <h3><i class="fas fa-volume-up"></i> Voice Options</h3>
+                    <div class="voice-option">
                         <label for="tts-toggle">Text-to-Speech</label>
-                        <div class="toggle-switch">
+                        <div class="toggle-container">
                             <input type="checkbox" id="tts-toggle" checked>
-                            <label for="tts-toggle"></label>
+                            <div class="toggle-switch">
+                                <div class="toggle-knob"></div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                
-                <div class="about-section">
-                    <h3>About</h3>
-                    <p>Lumo helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Main Chat Area -->
-        <div class="chat-container">
-            <div class="chat-header">
-                <h2>Textbook Q&A</h2>
-                <div class="header-controls">
-                    <!-- Theme Toggle Button (Moved to header) -->
-                    <button id="dark-mode-toggle" class="theme-toggle">
-                        <i class="fas fa-moon"></i>
-                    </button>
-                    <div class="status-indicator">
-                        <span id="status-text">Ready</span>
-                        <div id="status-dot"></div>
                     </div>
                 </div>
             </div>
             
-            <div class="chat-messages" id="chat-messages">
-                <div class="message system">
-                    <div class="message-content">
+            <div class="about-container glass-card">
+                <h3><i class="fas fa-info-circle"></i> About</h3>
+                <p>Lumo helps students learn from their textbooks in English, Tamil, or Sinhala.</p>
+            </div>
+        </div>
+        
+        <div class="glass-panel right-panel">
+            <div class="chat-header">
+                <h2>Textbook Q&A</h2>
+                <div class="chat-controls">
+                    <button id="dark-mode-toggle" class="mode-toggle" title="Toggle dark mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="status-badge">
+                        <div id="status-dot"></div>
+                        <span id="status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-content" id="chat-messages">
+                <div class="chat-bubble system">
+                    <div class="bubble-content">
                         Welcome to Lumo! Please upload a textbook to get started.
                     </div>
                 </div>
             </div>
             
-            <div class="chat-input-container">
+            <div class="chat-input-area">
                 <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
-                <button id="voice-input-button" class="voice-button" title="Speak your question">
+                <button id="voice-input-button" title="Speak your question">
                     <i class="fas fa-microphone"></i>
                 </button>
-                <button id="send-button" disabled>
+                <button id="send-button" disabled title="Send message">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>

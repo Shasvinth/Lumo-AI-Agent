@@ -166,6 +166,30 @@ function toggleTextToSpeech(event) {
     if (!ttsEnabled) {
         speechSynthesis.cancel();
     }
+    
+    // Update toggle switch visual state for new UI
+    updateToggleSwitch();
+}
+
+function updateToggleSwitch() {
+    const toggleKnob = document.querySelector('.toggle-knob');
+    const toggleSwitch = document.querySelector('.toggle-switch');
+    
+    if (ttsEnabled) {
+        toggleSwitch.style.backgroundColor = 'var(--primary-color)';
+        toggleKnob.style.left = '26px';
+    } else {
+        toggleSwitch.style.backgroundColor = '#e5e7eb';
+        toggleKnob.style.left = '2px';
+    }
+    
+    if (ttsToggle.disabled) {
+        toggleSwitch.style.opacity = '0.6';
+        toggleSwitch.style.cursor = 'not-allowed';
+    } else {
+        toggleSwitch.style.opacity = '1';
+        toggleSwitch.style.cursor = 'pointer';
+    }
 }
 
 function handleLanguageChange(event) {
@@ -176,17 +200,17 @@ function handleLanguageChange(event) {
     if (selectedLanguage === 'ta' || selectedLanguage === 'si') {
         ttsEnabled = false;
         ttsToggle.checked = false;
-        // Add a disabled visual state to indicate TTS is not available
-        document.querySelector('.toggle-switch').classList.add('disabled');
         // Optionally disable the toggle control
         ttsToggle.disabled = true;
     } else {
         // Re-enable TTS for English
         ttsEnabled = true;
         ttsToggle.checked = true;
-        document.querySelector('.toggle-switch').classList.remove('disabled');
         ttsToggle.disabled = false;
     }
+    
+    // Update toggle switch visual state for new UI
+    updateToggleSwitch();
     
     // Only show language change message if chat is enabled
     if (!userInput.disabled) {
@@ -329,10 +353,10 @@ function handleSend() {
 
 function addMessage(type, content, metadata = null) {
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}`;
+    messageDiv.className = `chat-bubble ${type}`;
     
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
+    contentDiv.className = 'bubble-content';
     
     // Check if the content should be rendered as Markdown (only for assistant messages)
     if (type === 'assistant' && metadata && metadata.format === 'markdown') {
@@ -376,6 +400,9 @@ function addMessage(type, content, metadata = null) {
 function updateStatus(text, type) {
     statusText.textContent = text;
     statusDot.style.backgroundColor = `var(--${type}-color)`;
+    
+    // Add box shadow for better visibility in glass theme
+    statusDot.style.boxShadow = `0 0 5px var(--${type}-color)`;
 }
 
 function showError(message) {
