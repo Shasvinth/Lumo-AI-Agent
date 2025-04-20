@@ -129,12 +129,12 @@ body {
 }
 
 .logo {
-    font-size: 2rem;
     line-height: 1;
+    width: 2rem;
 }
 
 .app-title {
-    font-size: 1.8rem;
+    font-size: 2rem;
     font-weight: 700;
     background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
     background-clip: text;
@@ -737,7 +737,7 @@ input:disabled + .toggle-switch {
 }
 
 .app-logo {
-    font-size: 4rem;
+    width: 5rem;
     margin-bottom: 16px;
 }
 
@@ -915,7 +915,8 @@ input:disabled + .toggle-switch {
     }
     
     .chat-panel {
-        border-radius: 20px;
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
         border: 1px solid var(--glass-border);
         box-shadow: var(--glass-shadow);
         background: var(--card-bg);
