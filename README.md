@@ -24,6 +24,9 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 ├── static/                   # Static files
 │   ├── css/                  # CSS stylesheets
 │   │   └── styles.css        # Main stylesheet
+│   ├── images/               # Images and icons
+│   │   ├── favicon.ico       # Favicon for the site
+│   │   └── Logo.png          # App logo
 │   └── js/                   # JavaScript files
 │       └── script.js         # Main client-side script
 ├── templates/                # HTML templates
@@ -50,7 +53,7 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 
    ```
    git clone <repository-url>
-   cd Lumo
+   cd <Project Directory>
    ```
 
 2. Install dependencies:
@@ -108,4 +111,4 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 
 ## Credits
 
-Developed by [Your Name]
+Developed by [Shasvinth Srikanth](https://github.com/Shasvinth/) and [Resandu Marasinghe](https://github.com/ResanduMarasinghe/)
