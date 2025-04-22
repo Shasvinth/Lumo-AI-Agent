@@ -1,7 +1,7 @@
 """
-Web Interface for TealStor Multilingual Textbook Q&A
+Web Interface for Lumo Multilingual Textbook Q&A
 
-This module provides a Flask web application for the TealStor system.
+This module provides a Flask web application for the Lumo system.
 It handles file uploads, query processing, and serves the web interface.
 Supports multiple PDFs and manages separate embedding stores for each source.
 """
@@ -262,7 +262,7 @@ def export_csv():
         csv_file.seek(0)
         
         # Set filename with timestamp
-        filename = f"tealstor_queries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"lumo_queries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         
         # Return CSV as response
         return Response(
@@ -317,7 +317,7 @@ def export_excel():
         excel_file.seek(0)
         
         # Set filename with timestamp
-        filename = f"tealstor_queries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filename = f"lumo_queries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
         return send_file(
             excel_file,
