@@ -9,6 +9,70 @@
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <style>
+        /* Export buttons styles */
+        .export-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .export-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .export-button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .export-button.csv {
+            background-color: #28a745;
+        }
+        
+        .export-button.csv:hover {
+            background-color: #218838;
+        }
+        
+        .export-button.excel {
+            background-color: #17a2b8;
+        }
+        
+        .export-button.excel:hover {
+            background-color: #138496;
+        }
+        
+        .export-button.clear {
+            background-color: #dc3545;
+        }
+        
+        .export-button.clear:hover {
+            background-color: #c82333;
+        }
+        
+        /* History counter badge */
+        .history-counter {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -25,6 +89,10 @@
                         <div id="status-dot"></div>
                         <span id="status-text">Ready</span>
                     </div>
+                    <button id="history-button" class="icon-button" title="History and Export">
+                        <i class="fas fa-history"></i>
+                        <span class="history-counter" id="history-count">0</span>
+                    </button>
                     <button id="dark-mode-toggle" class="icon-button" title="Toggle dark mode">
                         <i class="fas fa-moon"></i>
                     </button>
@@ -95,6 +163,10 @@
                             <i class="fas fa-file-upload"></i>
                             <span>Upload Textbook</span>
                         </button>
+                        <button id="reset-all-button" class="upload-button" style="background-color: #dc3545; margin-top: 10px;">
+                            <i class="fas fa-trash-alt"></i>
+                            <span>Reset All Data</span>
+                        </button>
                     </div>
                 </div>
                 
@@ -120,6 +192,59 @@
                 <div class="setting-group" id="current-file-info">
                     <h3><i class="fas fa-file-pdf"></i> Current Textbook</h3>
                     <p class="file-info">No file uploaded</p>
+                </div>
+                
+                <div class="setting-group">
+                    <h3><i class="fas fa-history"></i> Conversation History</h3>
+                    <p>Export your conversation history to CSV or Excel</p>
+                    <div class="export-container">
+                        <button id="export-csv" class="export-button csv">
+                            <i class="fas fa-file-csv"></i> Export to CSV
+                        </button>
+                        <button id="export-excel" class="export-button excel">
+                            <i class="fas fa-file-excel"></i> Export to Excel
+                        </button>
+                        <button id="clear-history" class="export-button clear">
+                            <i class="fas fa-trash"></i> Clear History
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- History Panel (Hidden by default) -->
+        <div class="settings-panel" id="history-panel">
+            <div class="panel-header">
+                <h2>Conversation History</h2>
+                <button class="close-panel" id="close-history">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="settings-content">
+                <p>Export your conversation history to analyze or share your questions and answers.</p>
+                
+                <div class="export-container">
+                    <button id="export-csv-history" class="export-button csv">
+                        <i class="fas fa-file-csv"></i> Export to CSV
+                    </button>
+                    <button id="export-excel-history" class="export-button excel">
+                        <i class="fas fa-file-excel"></i> Export to Excel
+                    </button>
+                    <button id="clear-history-panel" class="export-button clear">
+                        <i class="fas fa-trash"></i> Clear History
+                    </button>
+                </div>
+                
+                <div class="setting-group">
+                    <h3><i class="fas fa-info-circle"></i> About Export</h3>
+                    <p>The export includes:</p>
+                    <ul>
+                        <li>All your questions</li>
+                        <li>AI-generated answers</li>
+                        <li>Source references (textbooks, pages, sections)</li>
+                        <li>Timestamps and language information</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -153,5 +278,117 @@
     </div>
     
     <script src="/static/js/script.js"></script>
+    <script>
+        // Conversation history counter
+        let historyCount = 0;
+        const historyCounter = document.getElementById('history-count');
+        
+        // Reset all data
+        document.getElementById('reset-all-button').addEventListener('click', function() {
+            if (confirm('Are you sure you want to reset all data? This will remove all uploaded textbooks and their vector stores. This cannot be undone.')) {
+                fetch('/reset-all', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reset history counter
+                        historyCount = 0;
+                        historyCounter.textContent = '0';
+                        
+                        // Update UI for no files
+                        document.getElementById('current-file-text').textContent = 'No file uploaded';
+                        document.getElementById('send-button').disabled = true;
+                        document.getElementById('user-input').disabled = true;
+                        
+                        // Show confirmation
+                        alert('All data has been reset. You can now upload a new textbook.');
+                        
+                        // Reload the page to reset the UI completely
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to reset data. Please try again.');
+                });
+            }
+        });
+        
+        // Export functionality
+        document.getElementById('export-csv').addEventListener('click', function() {
+            window.location.href = '/export-csv';
+        });
+        
+        document.getElementById('export-excel').addEventListener('click', function() {
+            window.location.href = '/export-excel';
+        });
+        
+        document.getElementById('export-csv-history').addEventListener('click', function() {
+            window.location.href = '/export-csv';
+        });
+        
+        document.getElementById('export-excel-history').addEventListener('click', function() {
+            window.location.href = '/export-excel';
+        });
+        
+        // Clear history
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear your conversation history? This cannot be undone.')) {
+                fetch('/clear-history', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reset history counter
+                        historyCount = 0;
+                        historyCounter.textContent = '0';
+                        
+                        // Show confirmation
+                        alert('Conversation history has been cleared.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to clear history. Please try again.');
+                });
+            }
+        }
+        
+        document.getElementById('clear-history').addEventListener('click', clearHistory);
+        document.getElementById('clear-history-panel').addEventListener('click', clearHistory);
+        
+        // History panel
+        const historyPanel = document.getElementById('history-panel');
+        const historyButton = document.getElementById('history-button');
+        const closeHistory = document.getElementById('close-history');
+        
+        // Show history panel
+        historyButton.addEventListener('click', function() {
+            hideAllPanels();
+            historyPanel.style.right = '0';
+            overlay.style.display = 'block';
+        });
+        
+        // Close history panel
+        closeHistory.addEventListener('click', function() {
+            historyPanel.style.right = '-100%';
+            overlay.style.display = 'none';
+        });
+        
+        // Update message counter when messages are added
+        const originalAddMessage = window.addMessage;
+        window.addMessage = function(type, content, metadata = null) {
+            // Call the original function
+            originalAddMessage(type, content, metadata);
+            
+            // Only count assistant messages
+            if (type === 'assistant') {
+                historyCount++;
+                historyCounter.textContent = historyCount;
+            }
+        };
+    </script>
 </body>
 </html>
