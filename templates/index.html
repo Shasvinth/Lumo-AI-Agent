@@ -70,7 +70,9 @@
             border-radius: 12px;
             padding: 2px 8px;
             font-size: 0.8rem;
-            margin-left: 8px;
+            margin-left: 5px;
+            min-width: 20px;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -222,7 +224,7 @@
             </div>
             
             <div class="settings-content">
-                <p>Export your conversation history to analyze or share your questions and answers.</p>
+                <p class="intro-text">Export your conversation history to analyze or share your questions and answers.</p>
                 
                 <div class="export-container">
                     <button id="export-csv-history" class="export-button csv">
@@ -359,24 +361,6 @@
         document.getElementById('clear-history').addEventListener('click', clearHistory);
         document.getElementById('clear-history-panel').addEventListener('click', clearHistory);
         
-        // History panel
-        const historyPanel = document.getElementById('history-panel');
-        const historyButton = document.getElementById('history-button');
-        const closeHistory = document.getElementById('close-history');
-        
-        // Show history panel
-        historyButton.addEventListener('click', function() {
-            hideAllPanels();
-            historyPanel.style.right = '0';
-            overlay.style.display = 'block';
-        });
-        
-        // Close history panel
-        closeHistory.addEventListener('click', function() {
-            historyPanel.style.right = '-100%';
-            overlay.style.display = 'none';
-        });
-        
         // Update message counter when messages are added
         const originalAddMessage = window.addMessage;
         window.addMessage = function(type, content, metadata = null) {
@@ -389,6 +373,26 @@
                 historyCounter.textContent = historyCount;
             }
         };
+
+        // History button functionality
+        document.getElementById('history-button').addEventListener('click', function() {
+            document.getElementById('history-panel').style.right = '0';
+            document.getElementById('overlay').style.display = 'block';
+        });
+
+        // Close history panel
+        document.getElementById('close-history').addEventListener('click', function() {
+            document.getElementById('history-panel').style.right = '-100%';
+            document.getElementById('overlay').style.display = 'none';
+        });
+        
+        // Close panels when overlay is clicked
+        document.getElementById('overlay').addEventListener('click', function() {
+            document.getElementById('history-panel').style.right = '-100%';
+            document.getElementById('settings-panel').classList.remove('active');
+            document.getElementById('about-panel').classList.remove('active');
+            this.style.display = 'none';
+        });
     </script>
 </body>
 </html>

@@ -14,6 +14,9 @@ const ttsToggle = document.getElementById('tts-toggle');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
 const currentFileText = document.getElementById('current-file-text');
 const currentFileInfo = document.getElementById('current-file-info');
+const historyPanel = document.getElementById('history-panel');
+const historyButton = document.getElementById('history-button');
+const closeHistory = document.getElementById('close-history');
 
 // Toggle functionality
 const toggleSwitch = document.querySelector('.toggle-switch');
@@ -147,6 +150,8 @@ languageSelector.addEventListener('change', handleLanguageChange);
 voiceInputButton.addEventListener('click', toggleSpeechRecognition);
 ttsToggle.addEventListener('change', toggleTextToSpeech);
 darkModeToggle.addEventListener('click', toggleDarkMode);
+historyButton.addEventListener('click', showHistory);
+closeHistory.addEventListener('click', hideHistory);
 
 // Manual toggle click handling (in addition to the checkbox change event)
 document.querySelector('.toggle-switch').addEventListener('click', function() {
@@ -209,6 +214,7 @@ function hideAbout() {
 function hideAllPanels() {
     settingsPanel.classList.remove('active');
     aboutPanel.classList.remove('active');
+    historyPanel.classList.remove('active');
     overlay.classList.remove('active');
     setActiveNavItem(navChat);
 }
@@ -572,6 +578,16 @@ function loadDarkModePreference() {
         document.querySelector('#dark-mode-toggle i').classList.remove('fa-moon');
         document.querySelector('#dark-mode-toggle i').classList.add('fa-sun');
     }
+}
+
+function showHistory() {
+    historyPanel.classList.add('active');
+    overlay.classList.add('active');
+}
+
+function hideHistory() {
+    historyPanel.classList.remove('active');
+    overlay.classList.remove('active');
 }
 
 // Initialize
