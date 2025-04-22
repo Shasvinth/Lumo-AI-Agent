@@ -551,7 +551,8 @@ body {
 
 /* Settings and About Panels */
 .settings-panel,
-.about-panel {
+.about-panel,
+#history-panel {
     position: absolute;
     top: 0;
     left: 0;
@@ -569,19 +570,22 @@ body {
 }
 
 .settings-panel.active,
-.about-panel.active {
+.about-panel.active,
+#history-panel.active {
     transform: translateY(0);
 }
 
 .settings-content,
-.about-content {
+.about-content,
+#history-panel .settings-content {
     opacity: 0;
     transform: translateY(20px);
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .settings-panel.active .settings-content,
-.about-panel.active .about-content {
+.about-panel.active .about-content,
+#history-panel.active .settings-content {
     opacity: 1;
     transform: translateY(0);
     transition-delay: 0.2s;
@@ -897,6 +901,99 @@ input:disabled + .toggle-switch {
     margin: 1.5rem 0;
 }
 
+/* History panel specific */
+#history-panel {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 100%;
+    height: 100%;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--backdrop-blur));
+    -webkit-backdrop-filter: blur(var(--backdrop-blur));
+    z-index: var(--z-index-modal);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--glass-shadow);
+    transition: right 0.3s ease;
+    overflow-y: auto;
+    padding: 0; /* No padding for the panel itself, we'll add padding to content */
+}
+
+#history-panel .settings-content {
+    padding: 20px; /* Add padding to the content area */
+}
+
+#history-panel .setting-group {
+    margin-bottom: 24px;
+    padding: 20px; /* Increased padding */
+}
+
+/* Fix bullet alignment in About Export section */
+#history-panel .setting-group ul {
+    padding-left: 20px; /* Keep bullets inside the container */
+    margin-left: 0;
+    margin-top: 10px;
+}
+
+#history-panel .setting-group li {
+    margin-bottom: 8px; /* Add more space between list items */
+}
+
+#history-panel p {
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+#history-panel .export-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin: 25px 0;
+    justify-content: center;
+}
+
+#history-panel .export-button {
+    min-width: 160px;
+    padding: 12px 16px;
+    font-size: 1rem;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+}
+
+#history-panel .export-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.2);
+}
+
+#history-panel p.intro-text {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+@media (min-width: 992px) {
+    #history-panel {
+        width: 480px;
+        height: calc(100% - 40px);
+        top: 20px;
+        border-radius: 20px;
+        border: 1px solid var(--glass-border);
+    }
+}
+
+/* History button styling */
+#history-button {
+    width: auto;
+    border-radius: 18px;
+    padding: 0 15px 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 /* Desktop enhancements */
 @media (min-width: 992px) {
     .app-container {
@@ -934,7 +1031,8 @@ input:disabled + .toggle-switch {
     }
     
     .settings-panel,
-    .about-panel {
+    .about-panel,
+    #history-panel {
         width: 480px;
         left: auto;
         right: 20px;
@@ -950,7 +1048,8 @@ input:disabled + .toggle-switch {
     }
     
     .settings-panel.active,
-    .about-panel.active {
+    .about-panel.active,
+    #history-panel.active {
         transform: translateX(0);
         visibility: visible;
         transition: transform var(--transition-speed) ease,
