@@ -492,8 +492,8 @@ function addMessage(type, content, metadata = null) {
     contentDiv.className = 'bubble-content';
     
     // Check if the content should be rendered as Markdown (only for assistant messages)
-    if (type === 'assistant' && metadata && metadata.format === 'markdown') {
-        // Render content as Markdown
+    if (type === 'assistant') {
+        // Render content as Markdown for all assistant responses
         contentDiv.innerHTML = md.render(content);
         contentDiv.classList.add('markdown-content');
     } else {
