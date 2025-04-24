@@ -160,7 +160,7 @@ def process_query():
     if query.lower().strip() in ['hi', 'hello', 'hey']:
         return jsonify({
             'success': True,
-            'answer': f"Hello! I'm your textbook assistant. How can I help you today?",
+            'answer': f"Hello! I'm Lumo, your textbook assistant. How can I help you today?",
             'sections': [],
             'pages': [],
             'language': 'en'
