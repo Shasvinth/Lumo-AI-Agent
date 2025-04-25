@@ -64,5 +64,34 @@ venv.bak/
 *.log
 *.tmp
 
-# FAISS indices and other large files
+# Processed data files and chunks
+processed_chunks.json
+chunks_*.json
 faiss_index.bin
+*_embeddings.npy
+*_vectors.npy
+
+# Uploaded data files
+uploads/data/
+uploads/web_data/
+uploads/exports/
+uploads/sources.json
+uploads/websites.json
+
+# Output data files
+data/output/
+data/input/
+*.csv
+*.xlsx
+*.xls
+*.pdf
+*.txt.chunks
+*.docx.chunks
+
+# Exclude large generated files but keep the directory structure
+!uploads/.gitkeep
+!uploads/data/.gitkeep
+!uploads/web_data/.gitkeep
+!uploads/exports/.gitkeep
+!data/output/.gitkeep
+!data/input/.gitkeep
