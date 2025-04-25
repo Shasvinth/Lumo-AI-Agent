@@ -21,6 +21,7 @@ import google.generativeai as genai
 from tqdm import tqdm
 from langdetect import detect, LangDetectException
 from deep_translator import GoogleTranslator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from components.processors.embedding_store import EmbeddingStore
 from components.utils.utils import (
@@ -297,28 +298,44 @@ Answer:"""
         print_info(f"Processing query {query_id}: {limit_text_for_display(query_text)}")
         
         try:
-            # Detect query language
-            query_lang = self.detect_language(query_text)
-            print_info(f"Detected query language: {query_lang}")
+            start_time = time.time()
             
-            # Translate query to English for embedding search
-            if query_lang != 'en':
-                query_text_en = self.translate_text(query_text, 'en')
-                print_info("Translated query to English for search")
-            else:
-                query_text_en = query_text
+            # Create a thread pool for parallel processing
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                # Step 1: Detect query language (can run in parallel)
+                language_future = executor.submit(self.detect_language, query_text)
+                
+                # Retrieve language result
+                query_lang = language_future.result()
+                print_info(f"Detected query language: {query_lang}")
+                
+                # Step 2: Translate query if needed
+                if query_lang != 'en':
+                    query_text_en = self.translate_text(query_text, 'en')
+                    print_info("Translated query to English for search")
+                else:
+                    query_text_en = query_text
+                
+                # Step 3: Retrieve relevant context
+                contexts = self.embedding_store.search(query_text_en, top_k=top_k)
+                
+                # Step 4: Extract metadata
+                sections, pages = self.extract_metadata(contexts)
+                sections_str, pages_str = format_metadata(sections, pages)
+                
+                # Step 5: Build prompt
+                prompt_future = executor.submit(
+                    self.construct_prompt, 
+                    query_text, 
+                    contexts, 
+                    target_lang=query_lang, 
+                    use_markdown=use_markdown
+                )
+                
+                # Get the prompt
+                prompt = prompt_future.result()
             
-            # Retrieve relevant context
-            contexts = self.embedding_store.search(query_text_en, top_k=top_k)
-            
-            # Extract metadata
-            sections, pages = self.extract_metadata(contexts)
-            sections_str, pages_str = format_metadata(sections, pages)
-            
-            # Build prompt in detected language
-            prompt = self.construct_prompt(query_text, contexts, target_lang=query_lang, use_markdown=use_markdown)
-            
-            # Generate answer with retry mechanism
+            # Generate answer with retry mechanism (this is API-bound so no need for threading)
             max_retries = 3
             answer = None
             
@@ -350,13 +367,18 @@ Answer:"""
             # Combine context texts
             combined_context = "\n\n".join([context["chunk"]["text"] for context in contexts])
             
+            end_time = time.time()
+            processing_time = end_time - start_time
+            print_info(f"Query processing completed in {processing_time:.2f} seconds")
+            
             result = {
                 "ID": query_id,
                 "Context": combined_context,
                 "Answer": answer,
                 "Sections": sections_str,
                 "Pages": pages_str,
-                "Language": query_lang
+                "Language": query_lang,
+                "ProcessingTime": f"{processing_time:.2f}s"
             }
             
             print_success(f"Query {query_id} processed successfully")
@@ -375,7 +397,8 @@ Answer:"""
                 "Answer": f"Error processing query: {str(e)}",
                 "Sections": "",
                 "Pages": "",
-                "Language": ""
+                "Language": "",
+                "ProcessingTime": ""
             }
     
     def process_queries_file(self, queries_path, output_csv="queries_output.csv", top_k=5):

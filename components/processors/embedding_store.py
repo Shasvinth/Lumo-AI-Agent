@@ -16,6 +16,7 @@ import gc  # For garbage collection
 import time
 import google.generativeai as genai
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import utility functions
 from components.utils.utils import (
@@ -127,72 +128,71 @@ class EmbeddingStore:
         """
         all_embeddings = []
         
-        # Process in smaller batches to avoid hitting API limits
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i+batch_size]
-            batch_embeddings = []
+        # Use ThreadPoolExecutor for parallel embedding generation
+        def process_text(args):
+            index, text = args
+            if len(text) > 100000:
+                text = text[:100000]
             
-            # Process each text in the batch
-            for j, text in enumerate(batch):
-                # Trim extremely long texts
-                if len(text) > 100000:
-                    text = text[:100000]
-                
-                # Apply retry logic
-                success = False
-                for retry in range(max_retries):
-                    try:
-                        # Get embedding
-                        result = genai.embed_content(
-                            model="models/embedding-001",
-                            content=text,
-                            task_type="retrieval_query"
-                        )
-                        
-                        # Extract embedding using multiple possible response formats
-                        if hasattr(result, 'embedding'):
-                            embedding_vector = result.embedding
-                            batch_embeddings.append(np.array(embedding_vector, dtype=np.float32))
-                            success = True
-                            break
-                        elif isinstance(result, dict) and 'embedding' in result:
-                            embedding_vector = result['embedding']
-                            batch_embeddings.append(np.array(embedding_vector, dtype=np.float32))
-                            success = True
-                            break
-                        elif hasattr(result, 'values'):
-                            embedding_vector = result.values
-                            batch_embeddings.append(np.array(embedding_vector, dtype=np.float32))
-                            success = True
-                            break
-                        elif hasattr(result, 'embeddings') and result.embeddings:
-                            embedding_vector = result.embeddings[0]
-                            batch_embeddings.append(np.array(embedding_vector, dtype=np.float32))
-                            success = True
-                            break
-                        else:
-                            if retry < max_retries - 1:
-                                print_warning(f"No embedding returned for text at index {i+j} (attempt {retry+1}/{max_retries}). Retrying...")
-                                time.sleep(1 * (retry + 1))  # Exponential backoff
-                                continue
-                            else:
-                                print_warning(f"No embedding returned for text at index {i+j} after {max_retries} attempts.")
-                                batch_embeddings.append(np.zeros(self.dimension, dtype=np.float32))
-                    except Exception as e:
+            # Apply retry logic
+            for retry in range(max_retries):
+                try:
+                    # Get embedding
+                    result = genai.embed_content(
+                        model="models/embedding-001",
+                        content=text,
+                        task_type="retrieval_query"
+                    )
+                    
+                    # Extract embedding using multiple possible response formats
+                    if hasattr(result, 'embedding'):
+                        return index, np.array(result.embedding, dtype=np.float32)
+                    elif isinstance(result, dict) and 'embedding' in result:
+                        return index, np.array(result['embedding'], dtype=np.float32)
+                    elif hasattr(result, 'values'):
+                        return index, np.array(result.values, dtype=np.float32)
+                    elif hasattr(result, 'embeddings') and result.embeddings:
+                        return index, np.array(result.embeddings[0], dtype=np.float32)
+                    else:
                         if retry < max_retries - 1:
-                            print_warning(f"Failed to embed text at index {i+j} (attempt {retry+1}/{max_retries}): {str(e)}. Retrying...")
+                            print_warning(f"No embedding returned for text at index {index} (attempt {retry+1}/{max_retries}). Retrying...")
                             time.sleep(1 * (retry + 1))  # Exponential backoff
                             continue
                         else:
-                            print_warning(f"Failed to embed text at index {i+j} after {max_retries} attempts: {str(e)}")
-                            batch_embeddings.append(np.zeros(self.dimension, dtype=np.float32))
+                            print_warning(f"No embedding returned for text at index {index} after {max_retries} attempts.")
+                            return index, np.zeros(self.dimension, dtype=np.float32)
+                except Exception as e:
+                    if retry < max_retries - 1:
+                        print_warning(f"Failed to embed text at index {index} (attempt {retry+1}/{max_retries}): {str(e)}. Retrying...")
+                        time.sleep(1 * (retry + 1))  # Exponential backoff
+                        continue
+                    else:
+                        print_warning(f"Failed to embed text at index {index} after {max_retries} attempts: {str(e)}")
+                        return index, np.zeros(self.dimension, dtype=np.float32)
+            
+            # If we get here, all retries failed
+            return index, np.zeros(self.dimension, dtype=np.float32)
+        
+        # Process in batches, each batch using parallel threads
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+            batch_embeddings = [None] * len(batch)
+            
+            # Create a list of (index, text) pairs
+            tasks = [(i+j, text) for j, text in enumerate(batch)]
+            
+            # Use ThreadPoolExecutor to process in parallel
+            with ThreadPoolExecutor(max_workers=min(len(batch), 5)) as executor:
+                futures = [executor.submit(process_text, args) for args in tasks]
                 
-                # If all retries failed and we didn't add an embedding yet, add a zero vector
-                if not success and len(batch_embeddings) < j + 1:
-                    batch_embeddings.append(np.zeros(self.dimension, dtype=np.float32))
-                
-                # Small delay to avoid rate limiting
-                time.sleep(0.1)
+                for future in as_completed(futures):
+                    try:
+                        idx, embedding = future.result()
+                        # Calculate the local index within the batch
+                        local_idx = idx - i
+                        batch_embeddings[local_idx] = embedding
+                    except Exception as e:
+                        print_error(f"Error processing embedding: {str(e)}")
             
             all_embeddings.extend(batch_embeddings)
             
@@ -341,43 +341,48 @@ class EmbeddingStore:
             
     def search(self, query, top_k=5):
         """
-        Search for most similar chunks to the query
+        Search for similar chunks to a query
         
         Args:
-            query (str): Query text to search for
-            top_k (int): Number of results to return
+            query (str): Search query
+            top_k (int): Number of top matches to return
             
         Returns:
-            list: List of dictionaries with chunk data and distance scores
+            list: List of dictionaries with chunks and metadata
         """
-        if self.index is None:
-            print_error("No index loaded. Call load or create_embeddings first.")
-            raise ValueError("No index loaded. Call load or create_embeddings first.")
-            
+        if not self.index:
+            print_error("No index loaded - call load() first")
+            return []
+        
+        start_time = time.time()
         print_info(f"Searching for: {limit_text_for_display(query)}")
-            
-        # Get query embedding
+        
         try:
+            # Get query embedding
             query_embedding = self.get_embedding(query)
-            query_embedding = np.array([query_embedding]).astype('float32')
+            query_embedding = query_embedding.reshape(1, -1).astype('float32')
             
-            # Search in FAISS index
-            distances, indices = self.index.search(query_embedding, top_k)
+            # Search the index
+            D, I = self.index.search(query_embedding, top_k)
             
-            # Get results
+            # Get the original chunks for the indices
             results = []
-            for i, idx in enumerate(indices[0]):
-                if idx != -1:  # -1 means no result
+            for i, idx in enumerate(I[0]):
+                if idx < len(self.chunks):
                     results.append({
-                        "chunk": self.chunks[idx],
-                        "distance": float(distances[0][i])
+                        "score": float(D[0][i]),
+                        "index": int(idx),
+                        "chunk": self.chunks[idx]
                     })
-                    
-            print_success(f"Found {len(results)} relevant chunks")
+            
+            end_time = time.time()
+            processing_time = end_time - start_time
+            print_success(f"Found {len(results)} matches in {processing_time:.2f} seconds")
+            
             return results
         except Exception as e:
             print_error(f"Search failed: {str(e)}")
-            raise
+            return []
 
     def test_embedding_api(self):
         """

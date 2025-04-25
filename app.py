@@ -943,6 +943,9 @@ def process_web_query():
     try:
         # Load processors for selected websites
         processors = []
+        website_names = []
+        source_urls = {}
+        
         for website in selected_websites:
             if website in APPROVED_WEBSITES:
                 if website not in WEB_SOURCE_PROCESSORS:
@@ -952,6 +955,9 @@ def process_web_query():
                     processor = RAGProcessor(website_data['index_path'], website_data['chunks_path'])
                     WEB_SOURCE_PROCESSORS[website] = processor
                 processors.append(WEB_SOURCE_PROCESSORS[website])
+                website_names.append(website)
+                # Store URL for later reference
+                source_urls[website] = APPROVED_WEBSITES[website]['url']
                 print(f"[WEB SEARCH] Added processor for {website}")
             else:
                 print(f"[WEB SEARCH] WARNING: Website {website} not found in approved websites")
@@ -962,23 +968,18 @@ def process_web_query():
         
         print(f"[WEB SEARCH] Using {len(processors)} website processors")
         
-        # Process query using all selected web sources
+        # Process query using all selected web sources in parallel
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import time
+        
+        start_time = time.time()
         combined_results = []
         used_sources = set()
-        source_urls = {}
         
-        for processor in processors:
+        def process_website(idx):
+            processor = processors[idx]
+            website_name = website_names[idx]
             query_id = str(uuid.uuid4())
-            
-            # Get website name from processor
-            website_name = None
-            for name, proc in WEB_SOURCE_PROCESSORS.items():
-                if proc == processor:
-                    website_name = name
-                    # Store URL for later reference
-                    if name in APPROVED_WEBSITES:
-                        source_urls[name] = APPROVED_WEBSITES[name]['url']
-                    break
             
             print(f"[WEB SEARCH] Processing query with website: {website_name}")
             
@@ -989,13 +990,35 @@ def process_web_query():
                 top_k=3  # Fewer results per source for web queries
             )
             
-            # Only add results if we got an answer
-            if result['Answer'].strip():
-                combined_results.append(result)
-                used_sources.add(website_name if website_name else "Unknown Source")
-                print(f"[WEB SEARCH] Got valid answer from {website_name}")
-            else:
-                print(f"[WEB SEARCH] No valid answer from {website_name}")
+            return {
+                'result': result,
+                'website_name': website_name
+            }
+        
+        # Use ThreadPoolExecutor to process websites in parallel
+        with ThreadPoolExecutor(max_workers=min(len(processors), 5)) as executor:
+            # Submit all tasks and collect futures
+            futures = [executor.submit(process_website, i) for i in range(len(processors))]
+            
+            # Process results as they complete
+            for future in as_completed(futures):
+                try:
+                    data = future.result()
+                    result = data['result']
+                    website_name = data['website_name']
+                    
+                    # Only add results if we got an answer
+                    if result['Answer'].strip():
+                        combined_results.append(result)
+                        used_sources.add(website_name)
+                        print(f"[WEB SEARCH] Got valid answer from {website_name}")
+                    else:
+                        print(f"[WEB SEARCH] No valid answer from {website_name}")
+                except Exception as e:
+                    print(f"[WEB SEARCH] Error processing website: {str(e)}")
+        
+        end_time = time.time()
+        print(f"[WEB SEARCH] Parallel processing completed in {end_time - start_time:.2f} seconds")
         
         if not combined_results:
             print("[WEB SEARCH] No results found from any web source")
@@ -1094,6 +1117,12 @@ def process_combined_query():
         return jsonify({'success': False, 'error': 'No sources selected'})
     
     try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import time
+
+        start_time = time.time()
+        results = {}
+        
         # Create a custom request object for textbook query
         textbook_data = {}
         if selected_sources and SOURCES:
@@ -1114,67 +1143,117 @@ def process_combined_query():
             }
             print(f"[COMBINED SEARCH] Will query websites: {selected_websites}")
         
-        # Process with textbook sources
-        textbook_result = None
-        if textbook_data:
+        # Function to process textbook query
+        def process_textbook_query():
             print("[COMBINED SEARCH] Processing textbook sources...")
             with app.test_request_context(
                 '/query', 
                 method='POST',
                 json=textbook_data
             ):
-                textbook_result = process_query()
-                if hasattr(textbook_result, 'get_json'):
-                    textbook_result = textbook_result.get_json()
-            
-            print(f"[COMBINED SEARCH] Textbook search successful: {textbook_result.get('success', False)}")
+                result = process_query()
+                if hasattr(result, 'get_json'):
+                    return result.get_json()
+                return result
         
-        # Process with web sources
-        web_result = None
-        if web_data:
+        # Function to process web query
+        def process_web_query():
             print("[COMBINED SEARCH] Processing web sources...")
             with app.test_request_context(
                 '/web-query', 
                 method='POST',
                 json=web_data
             ):
-                web_result = process_web_query()
-                if hasattr(web_result, 'get_json'):
-                    web_result = web_result.get_json()
-            
-            print(f"[COMBINED SEARCH] Web search successful: {web_result.get('success', False)}")
+                result = process_web_query()
+                if hasattr(result, 'get_json'):
+                    return result.get_json()
+                return result
         
-        # Combine results
+        # Use ThreadPoolExecutor to run both searches in parallel
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {}
+            
+            # Submit tasks based on selected sources
+            if textbook_data:
+                futures['textbook'] = executor.submit(process_textbook_query)
+            
+            if web_data:
+                futures['web'] = executor.submit(process_web_query)
+            
+            # Process results as they complete
+            for future in as_completed(futures.values()):
+                source = None
+                for src, fut in futures.items():
+                    if fut == future:
+                        source = src
+                        break
+                
+                try:
+                    results[source] = future.result()
+                    print(f"[COMBINED SEARCH] {source.capitalize()} search completed")
+                except Exception as e:
+                    print(f"[COMBINED SEARCH] Error processing {source} search: {str(e)}")
+                    results[source] = {'success': False, 'error': str(e)}
+        
+        end_time = time.time()
+        print(f"[COMBINED SEARCH] Parallel processing completed in {end_time - start_time:.2f} seconds")
+        
+        # Check if we have any successful results
+        textbook_result = results.get('textbook', {})
+        web_result = results.get('web', {})
+        
+        textbook_success = textbook_result.get('success', False) if textbook_result else False
+        web_success = web_result.get('success', False) if web_result else False
+        
+        if not textbook_success and not web_success:
+            print("[COMBINED SEARCH] No successful results from any source")
+            return jsonify({
+                'success': False, 
+                'error': 'No results found from any of the selected sources'
+            })
+        
+        # Combine all successful results
         combined_answer = ""
         all_sections = []
         all_pages = []
         all_web_sources = []
         
         # Add textbook results
-        if textbook_result and textbook_result.get('success'):
-            print("[COMBINED SEARCH] Adding textbook results to answer")
-            combined_answer += "From textbook sources:\n" + textbook_result['answer']
-            all_sections.extend(textbook_result.get('sections', []))
-            all_pages.extend(textbook_result.get('pages', []))
+        if textbook_success:
+            print("[COMBINED SEARCH] Adding textbook results")
+            textbook_answer = textbook_result.get('answer', '')
+            if textbook_answer:
+                combined_answer += "From textbooks:\n" + textbook_answer
+                
+            # Add sections and pages
+            if 'sections' in textbook_result:
+                all_sections.extend([f"Textbook: {s}" for s in textbook_result['sections']])
+            
+            if 'pages' in textbook_result:
+                all_pages.extend(textbook_result['pages'])
         
         # Add web results
-        if web_result and web_result.get('success'):
-            print("[COMBINED SEARCH] Adding web results to answer")
-            if combined_answer:
-                combined_answer += "\n\nFrom web sources:\n"
-            else:
-                combined_answer += "From web sources:\n"
-            combined_answer += web_result['answer']
-            all_sections.extend(web_result.get('sections', []))
-            all_pages.extend(web_result.get('pages', []))
-            all_web_sources = web_result.get('web_sources', [])
+        if web_success:
+            print("[COMBINED SEARCH] Adding web results")
+            web_answer = web_result.get('answer', '')
+            if web_answer:
+                if combined_answer:
+                    combined_answer += "\n\n"
+                combined_answer += web_answer
             
-            print(f"[COMBINED SEARCH] Web sources added: {len(all_web_sources)}")
+            # Add sections
+            if 'sections' in web_result:
+                all_sections.extend(web_result['sections'])
+            
+            # Add pages
+            if 'pages' in web_result:
+                all_pages.extend(web_result['pages'])
+            
+            # Add web sources
+            if 'web_sources' in web_result:
+                all_web_sources.extend(web_result['web_sources'])
         
-        # If no results were found
-        if not combined_answer:
-            print("[COMBINED SEARCH] No answers found from any source")
-            combined_answer = "I couldn't find relevant information from the selected sources."
+        print(f"[COMBINED SEARCH] Combined answer created successfully")
         
         # Store in query history
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1183,15 +1262,13 @@ def process_combined_query():
             'query_id': str(uuid.uuid4()),
             'query': query,
             'answer': combined_answer,
-            'sources': ", ".join(selected_sources) + " | " + ", ".join(selected_websites),
+            'sources': ", ".join([s['name'] for s in all_web_sources]) if all_web_sources else "Textbooks",
             'sections': ", ".join(all_sections),
             'pages': ", ".join(all_pages),
             'language': language,
             'type': 'combined_query'
         }
         QUERY_HISTORY.append(history_entry)
-        
-        print(f"[COMBINED SEARCH] Returning combined answer with {len(all_sections)} sections, {len(all_pages)} pages, {len(all_web_sources)} web sources")
         
         return jsonify({
             'success': True,
