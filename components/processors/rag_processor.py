@@ -23,6 +23,7 @@ from langdetect import detect, LangDetectException
 from deep_translator import GoogleTranslator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
+import numpy as np
 
 from components.processors.embedding_store import EmbeddingStore
 from components.utils.utils import (
@@ -43,72 +44,56 @@ class RAGProcessor:
     5. Format the results with metadata
     """
     
-    def __init__(self, index_path=None, chunks_path=None, model_name="gemini-1.5-flash"):
-        self.genai = genai
-        self.generation_config = {
-            "temperature": 0.1,
-            "top_p": 0.95,
-            "top_k": 0,
-            "max_output_tokens": 2048,
-            "stop_sequences": [],
-        }
-        self.safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_ONLY_HIGH"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_ONLY_HIGH"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_ONLY_HIGH"
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_ONLY_HIGH"
-            },
-        ]
-        self.model_name = model_name
-        self.model = genai.GenerativeModel(
-            model_name=model_name,
-            generation_config=self.generation_config,
-            safety_settings=self.safety_settings
-        )
-        self.embedding_model = genai.GenerativeModel("embedding-001")
-        logging.info(f"RAG Processor initialized with model: {model_name}")
+    def __init__(self, index_path, chunks_path):
+        """Initialize the RAG processor with a vector store and chunks."""
+        print_step(1, "Initializing RAG Processor")
         
-        # Load API key
-        print_info("Loading Gemini API key")
-        load_dotenv()
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        # Set up Google Gemini API access
+        google_api_key = os.getenv("GEMINI_API_KEY")
+        
+        if not google_api_key:
             print_error("GEMINI_API_KEY not found in environment variables")
-            raise ValueError("GEMINI_API_KEY not found in environment variables")
+            raise ValueError("GEMINI_API_KEY environment variable is required")
         
-        # Set up Gemini LLM with safety settings and rate limiting
-        print_info("Configuring Gemini model")
+        genai.configure(api_key=google_api_key)
+        
+        # Set up Gemini models - use 1.5-flash for faster processing
         try:
-            genai.configure(api_key=api_key)
-            print_success("Gemini model configured successfully")
+            # Use Gemini 1.5 Flash for faster processing with good quality
+            self.model = genai.GenerativeModel(
+                model_name="gemini-1.5-flash", 
+                generation_config={
+                    "temperature": 0.2,
+                    "top_p": 0.95,
+                    "top_k": 40,
+                    "max_output_tokens": 8192,
+                }
+            )
+            print_success("Initialized Gemini-1.5-Flash model for response generation")
+            
+            # Keep the embedding model the same
+            self.embedding_model = genai.GenerativeModel('embedding-001')
+            print_success("Initialized embedding model")
         except Exception as e:
-            print_error(f"Failed to configure Gemini model: {str(e)}")
+            print_error(f"Error initializing Gemini models: {e}")
             raise
         
-        # Load embedding store
-        print_info("Loading embedding store")
+        # Set up vector store for embeddings
         try:
-            self.embedding_store = EmbeddingStore()
-            if index_path and chunks_path:
-                self.embedding_store.load(index_path=index_path, chunks_path=chunks_path)
-                print_success(f"Embedding store loaded from {index_path} and {chunks_path}")
-            else:
-                self.embedding_store.load(index_path='faiss_index.bin', chunks_path='processed_chunks.json')
-                print_success("Embedding store loaded from default paths")
+            self.vector_store = EmbeddingStore()
+            self.vector_store.load(index_path=index_path, chunks_path=chunks_path)
+            print_success("Vector store loaded successfully")
         except Exception as e:
-            print_error(f"Failed to load embedding store: {str(e)}")
-            raise
+            print_error(f"Error loading vector store: {str(e)}")
+            raise ValueError(f"Failed to load vector store: {str(e)}")
+        
+        # Create caches for performance
+        self.embedding_cache = {}  # Cache for embeddings
+        self.query_cache = {}      # Cache for query results
+        self.cache_hits = 0
+        self.cache_misses = 0
+        
+        print_success(f"RAG Processor initialized successfully")
             
     def detect_language(self, text):
         """
@@ -163,141 +148,305 @@ class RAGProcessor:
             return text
             
     def generate_embeddings(self, content):
-        """Generate embeddings for a string using Google's Gemini embedding model."""
+        """Generate embeddings for a string using Google's Gemini embedding model with caching."""
+        if not isinstance(content, str):
+            print_error(f"Content must be a string, got {type(content)}")
+            return None
+            
+        # Create a cache key by hashing the content
+        cache_key = hash(content)
+        
+        # Check if we have this embedding cached
+        if cache_key in self.embedding_cache:
+            self.cache_hits += 1
+            cached_embedding = self.embedding_cache[cache_key]
+            
+            # Extra validation to ensure we don't return a callable from cache
+            if callable(cached_embedding):
+                print_error("Cached embedding is callable, which is invalid")
+                del self.embedding_cache[cache_key]  # Remove invalid entry
+                # Fall through to regenerate the embedding
+            else:
+                if self.cache_hits % 10 == 0:  # Only log occasionally to reduce output
+                    print_info(f"Embedding cache hit ({self.cache_hits} hits, {self.cache_misses} misses)")
+                return cached_embedding
+        
+        # If not in cache, generate the embedding
         try:
-            result = self.embedding_model.embed_content(
-                content=[genai.types.Content(parts=[genai.types.Part(text=content)])], task_type="RETRIEVAL_QUERY")
-            return result.embedding.values
+            self.cache_misses += 1
+            
+            # Check if content exceeds the size limit (approx. 30000 bytes to be safe)
+            content_bytes = len(content.encode('utf-8'))
+            max_bytes = 30000  # Set a safe limit below the 36000 API limit
+            
+            if content_bytes > max_bytes:
+                print_warning(f"Content size ({content_bytes} bytes) exceeds embedding limit. Truncating...")
+                
+                # Truncate by characters to stay under the limit
+                # Use a sliding window approach for truncation
+                char_limit = int(len(content) * (max_bytes / content_bytes) * 0.9)  # 90% safety factor
+                
+                # Take first portion which typically contains the most relevant info
+                truncated_content = content[:char_limit]
+                
+                # Verify truncated content is under the limit
+                if len(truncated_content.encode('utf-8')) > max_bytes:
+                    # Further truncate if still too large
+                    truncated_content = truncated_content[:int(char_limit * 0.9)]
+                
+                print_info(f"Truncated content to {len(truncated_content)} chars ({len(truncated_content.encode('utf-8'))} bytes)")
+                content = truncated_content
+            
+            # Use the correct embedding API call - genai.embed_content instead of model.embed_content
+            result = genai.embed_content(
+                model="models/embedding-001",
+                content=content,
+                task_type="retrieval_query"
+            )
+            
+            # Extract and properly format embedding values
+            embedding_values = None
+            
+            # Debug the result structure
+            print_info(f"Embedding result type: {type(result)}")
+            
+            # Handle the result based on its type
+            if isinstance(result, dict):
+                print_info("Result is a dictionary, using dictionary access")
+                if 'embedding' in result:
+                    embedding_values = result['embedding']
+                    print_info("Using result['embedding']")
+                elif 'values' in result:
+                    embedding_values = result['values']
+                    print_info("Using result['values']")
+            # For object with attributes
+            elif hasattr(result, 'embedding'):
+                print_info("Using result.embedding attribute")
+                embedding_values = result.embedding
+                # Check if embedding is itself an object with values
+                if hasattr(embedding_values, 'values') and not callable(embedding_values.values):
+                    print_info("Using result.embedding.values attribute")
+                    embedding_values = embedding_values.values
+            elif hasattr(result, 'values') and not callable(result.values):
+                print_info("Using result.values attribute")
+                embedding_values = result.values
+            
+            # Final validation - ensure we don't have a callable
+            if embedding_values is None:
+                print_error("Could not extract embedding values from result")
+                return None
+            if callable(embedding_values):
+                print_error("Extracted embedding is a callable, not valid embedding data")
+                return None
+                
+            # Convert embedding to numpy array if it's not already
+            if not isinstance(embedding_values, np.ndarray):
+                try:
+                    print_info(f"Converting embedding from {type(embedding_values)} to numpy array")
+                    embedding_values = np.array(embedding_values, dtype=np.float32)
+                except Exception as e:
+                    print_error(f"Failed to convert embedding to numpy array: {str(e)}")
+                    return None
+            
+            # Store in cache before returning
+            self.embedding_cache[cache_key] = embedding_values
+            
+            # Log cache stats occasionally
+            if self.cache_misses % 10 == 0:
+                print_info(f"Embedding cache miss ({self.cache_hits} hits, {self.cache_misses} misses)")
+                
+            return embedding_values
         except Exception as e:
             logging.error(f"Error generating embeddings: {e}")
+            print_warning(f"Embedding generation failed: {str(e)}")
+            
+            # If the error is about payload size, attempt more aggressive truncation
+            if "payload size exceeds the limit" in str(e):
+                try:
+                    print_info("Attempting more aggressive truncation for large content...")
+                    # Get approximately 40% of the content (from the beginning, which typically has the most relevant info)
+                    severe_truncation = content[:min(len(content) // 2, 10000)]
+                    
+                    # Use the correct embedding API call with severely truncated content
+                    result = genai.embed_content(
+                        model="models/embedding-001",
+                        content=severe_truncation,
+                        task_type="retrieval_query"
+                    )
+                    
+                    # Extract embedding values using the same approach
+                    embedding_values = None
+                    
+                    # Debug the result structure
+                    print_info(f"Truncated embedding result type: {type(result)}")
+                    
+                    # Handle the result based on its type
+                    if isinstance(result, dict):
+                        print_info("Truncated result is a dictionary, using dictionary access")
+                        if 'embedding' in result:
+                            embedding_values = result['embedding']
+                            print_info("Using truncated result['embedding']")
+                        elif 'values' in result:
+                            embedding_values = result['values']
+                            print_info("Using truncated result['values']")
+                    # For object with attributes
+                    elif hasattr(result, 'embedding'):
+                        print_info("Using truncated result.embedding attribute")
+                        embedding_values = result.embedding
+                        # Check if embedding is itself an object with values
+                        if hasattr(embedding_values, 'values') and not callable(embedding_values.values):
+                            print_info("Using truncated result.embedding.values attribute")
+                            embedding_values = embedding_values.values
+                    elif hasattr(result, 'values') and not callable(result.values):
+                        print_info("Using truncated result.values attribute")
+                        embedding_values = result.values
+                    
+                    # Final validation - ensure we don't have a callable
+                    if embedding_values is None:
+                        print_error("Could not extract embedding values from truncated result")
+                        return None
+                    if callable(embedding_values):
+                        print_error("Extracted truncated embedding is a callable, not valid embedding data")
+                        return None
+                    
+                    # Convert embedding to numpy array if it's not already
+                    if not isinstance(embedding_values, np.ndarray):
+                        try:
+                            print_info(f"Converting truncated embedding from {type(embedding_values)} to numpy array")
+                            embedding_values = np.array(embedding_values, dtype=np.float32)
+                        except Exception as e:
+                            print_error(f"Failed to convert truncated embedding to numpy array: {str(e)}")
+                            return None
+                    
+                    # We don't cache this result since it's a fallback
+                    print_success("Successfully generated embedding with severe truncation")
+                    return embedding_values
+                except Exception as inner_e:
+                    print_error(f"Even with severe truncation, embedding failed: {str(inner_e)}")
+            
             return None
 
-    def construct_prompt(self, query, contexts, language="en", is_web_content=False):
-        """
-        Construct a prompt for the RAG model based on the query, contexts, and language.
-        Enhanced to give more weight to web content when specified.
-        """
-        if language == "en":
-            if is_web_content:
-                # Enhanced prompt for web content
-                system_prompt = (
-                    "You are an expert assistant trained to provide comprehensive and detailed answers based on web content. "
-                    "The user has searched for information online, and I need you to carefully analyze the web search results provided. "
-                    "You must generate a highly detailed, factual response that thoroughly addresses the query using ONLY the information in these search results. "
-                    "Include specific names, dates, events, and statistics when present in the sources. "
-                    "If the information in the search results is incomplete but relevant, make note of this. "
-                    "DO NOT make up or infer information not present in the search results. "
-                    "If the web search results do not contain information relevant to answering the query, state this clearly. "
-                    "Structure your answer in a coherent and logical manner, with paragraphs for different aspects of the answer. "
-                    "Cite specific web sources when possible by referencing their URLs or titles."
-                )
-            else:
-                # Regular prompt for textbook content
-                system_prompt = (
-                    "You are an expert assistant helping users understand complex topics. "
-                    "For the following question, I'll provide relevant context from educational materials. "
-                    "Use ONLY the information in these contexts to construct your answer. "
-                    "If the information needed to answer the question is not in the contexts provided, "
-                    "simply state that you don't have enough information to answer accurately. "
-                    "DO NOT make up or infer information not present in the provided contexts."
-                )
-        elif language == "ta":
-            if is_web_content:
-                # Enhanced Tamil prompt for web content
-                system_prompt = (
-                    "நீங்கள் இணைய உள்ளடக்கத்தின் அடிப்படையில் விரிவான மற்றும் விரிவான பதில்களை வழங்க பயிற்சி பெற்ற ஒரு நிபுணர் உதவியாளர். "
-                    "பயனர் ஆன்லைனில் தகவலைத் தேடியுள்ளார், மேலும் வழங்கப்பட்ட தேடல் முடிவுகளை கவனமாக பகுப்பாய்வு செய்ய வேண்டும். "
-                    "இந்த தேடல் முடிவுகளில் உள்ள தகவல்களை மட்டும் பயன்படுத்தி வினவலை முழுமையாக நிவர்த்தி செய்யும் மிகவும் விரிவான, உண்மையான பதிலை நீங்கள் உருவாக்க வேண்டும். "
-                    "ஆதாரங்களில் இருக்கும் போது குறிப்பிட்ட பெயர்கள், தேதிகள், நிகழ்வுகள் மற்றும் புள்ளிவிவரங்களைச் சேர்க்கவும். "
-                    "தேடல் முடிவுகளில் உள்ள தகவல் முழுமையற்றதாக இருந்தாலும் தொடர்புடையதாக இருந்தால், இதைக் குறிப்பிடவும். "
-                    "தேடல் முடிவுகளில் இல்லாத தகவல்களை உருவாக்கவோ அல்லது ஊகிக்கவோ வேண்டாம். "
-                    "வலைத் தேடல் முடிவுகளில் வினவலுக்குப் பதிலளிப்பதற்கான தொடர்புடைய தகவல்கள் இல்லை என்றால், இதைத் தெளிவாகக் கூறுங்கள். "
-                    "உங்கள் பதிலை ஒத்திசைவான மற்றும் தர்க்கரீதியான முறையில் கட்டமைக்கவும், பதிலின் வெவ்வேறு அம்சங்களுக்கான பத்திகளுடன். "
-                    "சாத்தியமான போது அவற்றின் URL கள் அல்லது தலைப்புகளைக் குறிப்பிடுவதன் மூலம் குறிப்பிட்ட இணைய ஆதாரங்களை மேற்கோள் காட்டவும்."
-                )
-            else:
-                # Regular Tamil prompt for textbook content
-                system_prompt = (
-                    "நீங்கள் சிக்கலான தலைப்புகளைப் புரிந்துகொள்ள பயனர்களுக்கு உதவும் நிபுணர் உதவியாளர். "
-                    "பின்வரும் கேள்விக்கு, நான் கல்வி உபகரணங்களிலிருந்து தொடர்புடைய சூழலை வழங்குவேன். "
-                    "உங்கள் பதிலை உருவாக்க இந்த சூழல்களில் உள்ள தகவல்களை மட்டுமே பயன்படுத்தவும். "
-                    "கேள்விக்கு பதிலளிக்க தேவையான தகவல்கள் வழங்கப்பட்ட சூழல்களில் இல்லை என்றால், "
-                    "துல்லியமாக பதிலளிக்க போதுமான தகவல்கள் இல்லை என்பதைக் கூறவும். "
-                    "வழங்கப்பட்ட சூழல்களில் இல்லாத தகவல்களை உருவாக்கவோ அல்லது ஊகிக்கவோ வேண்டாம்."
-                )
-        elif language == "si":
-            if is_web_content:
-                # Enhanced Sinhala prompt for web content
-                system_prompt = (
-                    "ඔබ වෙබ් අන්තර්ගතය මත පදනම්ව සවිස්තරාත්මක හා විස්තරාත්මක පිළිතුරු සැපයීමට පුහුණු කරන ලද විශේෂඥ සහායකයෙකි. "
-                    "පරිශීලකයා මාර්ගගතව තොරතුරු සොයා ඇති අතර, මම ඔබට සපයා ඇති සෙවුම් ප්‍රතිඵල ප්‍රවේශමෙන් විශ්ලේෂණය කිරීමට අවශ්‍යයි. "
-                    "ඔබ මෙම සෙවුම් ප්‍රතිඵලවල ඇති තොරතුරු පමණක් භාවිතා කරමින් විමසුමට සම්පූර්ණයෙන් ආමන්ත්‍රණය කරන ඉතා විස්තරාත්මක, කරුණු සහිත ප්‍රතිචාරයක් ජනනය කළ යුතුය. "
-                    "මූලාශ්‍රවල ඇති විට නිශ්චිත නම්, දින, සිදුවීම් සහ සංඛ්‍යාලේඛන ඇතුළත් කරන්න. "
-                    "සෙවුම් ප්‍රතිඵලවල ඇති තොරතුරු අසම්පූර්ණ නමුත් අදාළ නම්, මෙය සටහන් කරන්න. "
-                    "සෙවුම් ප්‍රතිඵලවල නොමැති තොරතුරු හදා ගැනීම හෝ අනුමාන කිරීම නොකරන්න. "
-                    "වෙබ් සෙවුම් ප්‍රතිඵලවල විමසුමට පිළිතුරු දීමට අදාළ තොරතුරු අඩංගු නොවේ නම්, මෙය පැහැදිලිව ප්‍රකාශ කරන්න. "
-                    "ඔබේ පිළිතුර සුසංගත හා තාර්කික ආකාරයකින්, පිළිතුරේ විවිධ අංශ සඳහා ඡේද සමඟ ව්‍යුහගත කරන්න. "
-                    "හැකි විට ඔවුන්ගේ URLs හෝ මාතෘකා යොමු කිරීමෙන් නිශ්චිත වෙබ් ප්‍රභවයන් උපුටා දක්වන්න."
-                )
-            else:
-                # Regular Sinhala prompt for textbook content
-                system_prompt = (
-                    "ඔබ සංකීර්ණ මාතෘකා තේරුම් ගැනීමට පරිශීලකයින්ට උදව් කරන විශේෂඥ සහායකයෙකි. "
-                    "පහත ප්‍රශ්නය සඳහා, මම අධ්‍යාපනික ද්‍රව්‍ය වලින් අදාළ සන්දර්භය ලබා දෙන්නෙමි. "
-                    "ඔබේ පිළිතුර තැනීමට මෙම සන්දර්භයන්හි ඇති තොරතුරු පමණක් භාවිතා කරන්න. "
-                    "ප්‍රශ්නයට පිළිතුරු දීමට අවශ්‍ය තොරතුරු සපයා ඇති සන්දර්භයන්හි නොමැති නම්, "
-                    "නිවැරදිව පිළිතුරු දීමට ප්‍රමාණවත් තොරතුරු ඔබට නොමැති බව පවසන්න. "
-                    "සපයා ඇති සන්දර්භයන්හි නොමැති තොරතුරු හදා ගැනීම හෝ අනුමාන කිරීම නොකරන්න."
-                )
-        else:
-            if is_web_content:
-                # Default enhanced prompt for web content (English)
-                system_prompt = (
-                    "You are an expert assistant trained to provide comprehensive and detailed answers based on web content. "
-                    "The user has searched for information online, and I need you to carefully analyze the web search results provided. "
-                    "You must generate a highly detailed, factual response that thoroughly addresses the query using ONLY the information in these search results. "
-                    "Include specific names, dates, events, and statistics when present in the sources. "
-                    "If the information in the search results is incomplete but relevant, make note of this. "
-                    "DO NOT make up or infer information not present in the search results. "
-                    "If the web search results do not contain information relevant to answering the query, state this clearly. "
-                    "Structure your answer in a coherent and logical manner, with paragraphs for different aspects of the answer. "
-                    "Cite specific web sources when possible by referencing their URLs or titles."
-                )
-            else:
-                # Default regular prompt for textbook content (English)
-                system_prompt = (
-                    "You are an expert assistant helping users understand complex topics. "
-                    "For the following question, I'll provide relevant context from educational materials. "
-                    "Use ONLY the information in these contexts to construct your answer. "
-                    "If the information needed to answer the question is not in the contexts provided, "
-                    "simply state that you don't have enough information to answer accurately. "
-                    "DO NOT make up or infer information not present in the provided contexts."
-                )
-
-        # Format the contexts with titles/sources when available
+    def _format_contexts(self, contexts):
+        """Format contexts with their titles, sources, and page references."""
         formatted_contexts = ""
         for idx, context in enumerate(contexts, 1):
             context_text = context.get("text", "")
             context_title = context.get("title", "")
             context_source = context.get("source", "")
+            page_num = context.get("page_num", "")
+            section = context.get("section", "")
+            descriptive_title = context.get("descriptive_title", "")
             
-            if context_title:
-                formatted_contexts += f"CONTEXT {idx} (Source: {context_title}):\n{context_text}\n\n"
-            elif context_source:
-                formatted_contexts += f"CONTEXT {idx} (Source: {context_source}):\n{context_text}\n\n"
+            source_info = []
+            if descriptive_title:
+                source_info.append(f"Title: {descriptive_title}")
+            elif context_title:
+                source_info.append(f"Title: {context_title}")
+            if context_source:
+                source_info.append(f"Source: {context_source}")
+            if page_num:
+                source_info.append(f"Page: {page_num}")
+            if section:
+                source_info.append(f"Section: {section}")
+            
+            source_str = ", ".join(source_info)
+            if source_str:
+                formatted_contexts += f"CONTEXT {idx} ({source_str}):\n{context_text}\n\n"
             else:
                 formatted_contexts += f"CONTEXT {idx}:\n{context_text}\n\n"
+            
+        return formatted_contexts
 
-        # Assemble the full prompt
-        full_prompt = (
-            f"{system_prompt}\n\n"
-            f"USER QUERY: {query}\n\n"
-            f"CONTEXTS:\n{formatted_contexts}\n"
-            f"Based on the contexts provided, please answer the user's query. If the contexts are not relevant to the query, please state so clearly."
-        )
+    def determine_query_type(self, query):
+        """
+        Determine the type of query based on its content.
+        This is a simple implementation that can be expanded.
+        
+        Args:
+            query (str): Query text
+            
+        Returns:
+            str: Query type (default, definition, comparison, etc.)
+        """
+        query = query.lower()
+        
+        # Default to regular query type
+        query_type = "regular"
+        
+        # Check for definition queries
+        if any(pattern in query for pattern in [
+            "what is", "what are", "define", "definition of", "meaning of", 
+            "explain", "describe", "tell me about"
+        ]):
+            query_type = "definition"
+            
+        # Check for comparison queries
+        elif any(pattern in query for pattern in [
+            "compare", "difference between", "similarities between", 
+            "versus", "vs", "similarities and differences"
+        ]):
+            query_type = "comparison"
+            
+        # Check for list/enumeration queries
+        elif any(pattern in query for pattern in [
+            "list", "enumerate", "what are the", "steps in", "stages of", 
+            "types of", "kinds of", "examples of"
+        ]):
+            query_type = "list"
+        
+        return query_type
 
-        return full_prompt
+    def construct_prompt(self, query, contexts, query_id):
+        """
+        Constructs a prompt for an LLM based on the retrieved contexts.
+        
+        Args:
+            query (str): The user's query
+            contexts (str): Formatted context string with all relevant text chunks
+            query_id (str): Unique ID for the query
+            
+        Returns:
+            str: A formatted prompt with instructions and context
+        """
+        # Determine query type to optimize prompt
+        query_type = self.determine_query_type(query)
+        
+        # Log query type for debugging
+        print_info(f"Query type detected: {query_type}")
+        
+        # Base template instructions are the same regardless of query type
+        base_instructions = """
+You are an AI assistant for textbooks. Your job is to:
+1. Accurately answer questions based ONLY on the information in the provided texts
+2. If the information is not in the texts, explain what specific information you would need to answer properly, and suggest a more specific query the user could try
+3. Do NOT repeat "I don't have information" for each source - just say it once
+4. If web search results are provided but don't contain information relevant to the query, suggest related topics that might be more fruitful
+5. Never make up information or use your own knowledge
+6. Extract and provide specific page numbers and section references where available
+7. When answering questions, provide proper citations by mentioning specific sections or pages from your contexts
+8. Be concise but complete in your answers
+"""
+        
+        # Use a streamlined prompt format for faster processing
+        prompt = f"""
+{base_instructions}
 
+QUERY: {query}
+
+{contexts}
+
+INSTRUCTIONS:
+- Answer the query accurately and completely based only on the provided contexts
+- Format your answer to be readable and well-structured
+- If the information to answer the query is not provided in the contexts, suggest what specific information would help and recommend a better query
+- Provide page numbers and section references when possible
+- Query ID: {query_id}
+
+YOUR ANSWER:
+"""
+        
+        return prompt
+    
     def extract_metadata(self, contexts):
         """
         Extract section titles and page numbers from contexts
@@ -314,103 +463,192 @@ class RAGProcessor:
         for context in contexts:
             chunk = context["chunk"]
             if "section" in chunk:
-                sections.add(chunk["section"])
+                # Convert to string to avoid type errors during join
+                sections.add(str(chunk["section"]))
             elif "source" in chunk:
-                sections.add(chunk["source"])
+                # Convert to string to avoid type errors during join
+                sections.add(str(chunk["source"]))
             
             # Check if pages key exists before trying to access it
             if "pages" in chunk:
                 for page in chunk["pages"]:
-                    pages.add(page)
+                    # Convert to string to avoid type errors during join
+                    pages.add(str(page))
             elif "source_url" in chunk:
                 # For web sources, use the source URL as a "page"
                 pages.add(f"Source: {chunk.get('source_url', 'Web')}")
                 
         return list(sections), sorted(list(pages))
     
-    def process_query(self, query_id, query_text, top_k=5, language="en", source_type=None):
+    def process_query(self, query_id, query_text, top_k=5, language=None):
         """
-        Process a query and return a response with contexts.
+        Process a query and generate a response using RAG.
         
         Args:
-            query_id (str): Unique identifier for the query
-            query_text (str): The question text
-            top_k (int): Number of contexts to retrieve
-            language (str): Language code (en, ta, si)
-            source_type (str): Type of source ('web' or None for textbooks)
-            
+            query_id (str): Unique ID for the query
+            query_text (str): The query text
+            top_k (int): Number of top contexts to retrieve
+            language (str): Target language for response
+        
         Returns:
-            dict: Result with answer, sections, pages, etc.
+            dict: Response containing Answer, Pages, Sections, Language
         """
+        # Start timing for performance monitoring
+        start_time = time.time()
+        
+        # Check and handle source language
+        language_info = {}
+        original_language = None
+        
+        start_detect = time.time()
+        if language and language != 'en':
+            # Only detect if we need to translate non-English
+            language_info = self.detect_language(query_text)
+            original_language = language_info.get('language_code')
+            if original_language and original_language != 'en':
+                # Only translate if detected language isn't English
+                translated_query = self.translate_text(query_text, 'en')
+                if translated_query:
+                    print_info(f"Translated query from {original_language} to English: {translated_query}")
+                    query_text = translated_query
+        detect_time = time.time() - start_detect
+        print_info(f"Language detection took {detect_time:.2f}s")
+        
+        # Generate response using RAG
         try:
-            # Detect language if not specified
-            if not language or language == "auto":
-                language = self.detect_language(query_text)
+            # Create cache key for this query to avoid re-processing identical queries
+            cache_key = f"{hash(query_text)}_{top_k}"
+            if cache_key in self.query_cache:
+                print_info("Using cached query result")
+                cached_result = self.query_cache[cache_key]
                 
-            print_info(f"Processing query ID: {query_id}")
-            print_info(f"Query: {limit_text_for_display(query_text)}")
-            print_info(f"Language: {language}, Source type: {source_type or 'textbook'}")
-            
+                # If language is different from cached, only translate the answer
+                if language and language != cached_result.get('language', 'en'):
+                    print_info(f"Translating cached result to {language}")
+                    cached_result['answer'] = self.translate_text(cached_result['answer'], language)
+                    cached_result['language'] = language
+                
+                # Update timing info for cached result
+                process_time = time.time() - start_time
+                print_success(f"Query processed from cache in {process_time:.2f}s")
+                return cached_result
+                
             # Generate embedding for the query
-            query_embedding = self.embedding_store.get_embedding(query_text)
+            embedding_start = time.time()
+            query_embedding = self.generate_embeddings(query_text)
+            if query_embedding is None:
+                return {"answer": "Failed to generate query embedding.", "context": "", "pages": [], "sections": [], "language": language or "en"}
+            embedding_time = time.time() - embedding_start
+            print_info(f"Query embedding took {embedding_time:.2f}s")
             
-            # Search for relevant contexts
-            contexts = self.embedding_store.search(query_embedding, top_k=top_k)
-            print_info(f"Retrieved {len(contexts)} contexts")
+            # Retrieve similar contexts
+            retrieval_start = time.time()
+            try:
+                # Verify query_embedding is a valid type before searching
+                if query_embedding is None:
+                    print_error("Query embedding is None, cannot search")
+                    return {"answer": "Error: Could not generate a valid embedding for your query.", "context": "", "pages": [], "sections": [], "language": language or "en"}
+                
+                if callable(query_embedding):
+                    print_error("Query embedding is a callable object, not a valid embedding")
+                    return {"answer": "Error: Query embedding has an invalid format.", "context": "", "pages": [], "sections": [], "language": language or "en"}
+                
+                # Now search with the validated embedding
+                contexts = self.vector_store.search(query_embedding, top_k=top_k)
+                if contexts is None:
+                    return {"answer": "Error retrieving contexts.", "context": "", "pages": [], "sections": [], "language": language or "en"}
+            except Exception as search_error:
+                print_error(f"Error during context search: {str(search_error)}")
+                import traceback
+                traceback.print_exc()
+                return {"answer": f"Error searching for relevant information: {str(search_error)}", "context": "", "pages": [], "sections": [], "language": language or "en"}
+                
+            retrieval_time = time.time() - retrieval_start
+            print_info(f"Context retrieval took {retrieval_time:.2f}s ({len(contexts)} contexts)")
             
-            # Determine if this is web content
-            is_web_content = source_type == "web" if source_type else False
+            if not contexts:
+                return {"answer": "I couldn't find specific information about this topic in the available sources. Try rephrasing your question to be more specific, or check if your query relates to content in the selected sources. Consider focusing on key terms or concepts that might appear in the available materials.", "context": "", "pages": [], "sections": [], "language": language or "en"}
             
-            # Extract metadata (sections and pages)
-            sections, pages = self.extract_metadata(contexts)
-            sections_str = ", ".join(sections)
-            pages_str = ", ".join(map(str, pages))
+            # Extract metadata for response
+            metadata_start = time.time()
+            pages, sections = self.extract_metadata(contexts)
+            metadata_time = time.time() - metadata_start
+            print_info(f"Metadata extraction took {metadata_time:.2f}s")
             
-            # Format contexts for the prompt
-            formatted_contexts = []
-            for i, context in enumerate(contexts):
-                chunk = context["chunk"]
-                formatted_contexts.append({
-                    "text": chunk["text"],
-                    "title": chunk.get("section", ""),
-                    "source": chunk.get("source_url", "")
-                })
+            # Format contexts for prompt
+            format_start = time.time()
+            formatted_contexts = self._format_contexts(contexts)
+            format_time = time.time() - format_start
+            print_info(f"Context formatting took {format_time:.2f}s")
             
-            # Construct the prompt with context awareness
-            prompt = self.construct_prompt(query_text, formatted_contexts, language, is_web_content)
+            # Check if contexts actually contain meaningful content
+            has_meaningful_content = False
+            for ctx in contexts:
+                if 'chunk' in ctx and 'text' in ctx['chunk'] and len(ctx['chunk']['text'].strip()) > 50:
+                    has_meaningful_content = True
+                    break
+                    
+            if not has_meaningful_content:
+                print_warning(f"Retrieved contexts contain little or no meaningful content")
+                return {"answer": "While I found some references that might relate to your query, they don't contain enough specific information to provide a proper answer. Try being more specific in your question, or check if this topic is covered in the available materials. You might want to try a different query focusing on related concepts.", "context": formatted_contexts, "pages": pages, "sections": sections, "language": language or "en"}
             
-            # Generate the response
+            # Choose prompt template and construct prompt
+            prompt_start = time.time()
+            prompt = self.construct_prompt(query_text, formatted_contexts, query_id)
+            prompt_time = time.time() - prompt_start
+            print_info(f"Prompt construction took {prompt_time:.2f}s")
+            
+            # Generate response with Gemini
+            generation_start = time.time()
             response = self.model.generate_content(prompt)
-            answer = response.text
+            answer = response.text.strip()
+            generation_time = time.time() - generation_start
+            print_info(f"Answer generation took {generation_time:.2f}s")
             
-            # Format the context for return (debugging purposes)
-            context_str = "\n\n".join([f"Context {i+1}:\n{c['chunk']['text']}" for i, c in enumerate(contexts)])
+            # Translate response if needed
+            translation_time = 0
+            if language and language != 'en':
+                translation_start = time.time()
+                translated_answer = self.translate_text(answer, language)
+                if translated_answer:
+                    answer = translated_answer
+                translation_time = time.time() - translation_start
+                print_info(f"Answer translation took {translation_time:.2f}s")
             
-            # Return the result with all metadata
+            # Construct final result with lowercase keys
             result = {
-                "Query_ID": query_id,
-                "Answer": answer,
-                "Context": context_str,
-                "Sections": sections_str,
-                "Pages": pages_str,
-                "Language": language
+                "answer": answer,
+                "context": formatted_contexts,
+                "pages": pages,  # Store as list
+                "sections": sections,  # Store as list
+                "language": language or "en"
             }
             
+            # Cache result for future identical queries
+            self.query_cache[cache_key] = result.copy()
+            
+            # Track performance
+            total_time = time.time() - start_time
+            print_success(f"Query processed in {total_time:.2f}s")
+            print_info(f"Time breakdown: Detection={detect_time:.2f}s, Embedding={embedding_time:.2f}s, " +
+                      f"Retrieval={retrieval_time:.2f}s, Metadata={metadata_time:.2f}s, " +
+                      f"Formatting={format_time:.2f}s, Prompt={prompt_time:.2f}s, " +
+                      f"Generation={generation_time:.2f}s, Translation={translation_time:.2f}s")
+            
+            # Return the same result object
             return result
-                
+            
         except Exception as e:
+            logging.error(f"Error processing query: {str(e)}")
             print_error(f"Error processing query: {str(e)}")
             import traceback
             traceback.print_exc()
-            
-            # Return error result
             return {
-                "Query_ID": query_id,
-                "Answer": f"Error processing query: {str(e)}",
-                "Context": "",
-                "Sections": "",
-                "Pages": "",
-                "Language": language
+                "answer": f"Error processing query: {str(e)}",
+                "context": "",
+                "pages": [],
+                "sections": [],
+                "language": language or "en"
             }
     
     def process_queries_file(self, queries_path, output_csv="queries_output.csv", top_k=5):

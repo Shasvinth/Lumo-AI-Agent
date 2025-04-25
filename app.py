@@ -57,6 +57,12 @@ EXPORTS_FOLDER = os.path.join(UPLOAD_FOLDER, 'exports')
 if not os.path.exists(EXPORTS_FOLDER):
     os.makedirs(EXPORTS_FOLDER)
 
+# Add folders to app configuration
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['DATA_FOLDER'] = DATA_FOLDER
+app.config['WEB_DATA_FOLDER'] = WEB_DATA_FOLDER
+app.config['EXPORTS_FOLDER'] = EXPORTS_FOLDER
+
 # File to store persistent data
 SOURCES_FILE = os.path.join(UPLOAD_FOLDER, 'sources.json')
 SELECTED_SOURCES_FILE = os.path.join(UPLOAD_FOLDER, 'selected_sources.json')
@@ -304,6 +310,8 @@ def initialize_approved_websites():
                     'index_path': result['index_path'],
                     'chunks_path': result['chunks_path'],
                     'chunk_count': result['chunk_count'],
+                    'page_title': result.get('page_title', site["name"]),
+                    'descriptive_title': result.get('descriptive_title', ''),
                     'added_on': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 
@@ -323,6 +331,31 @@ load_selected_sources_from_disk()
 load_websites_from_disk()
 verify_data_integrity()
 
+# Initialize processor dictionaries in app.config
+try:
+    print("Initializing app.config['processors'] dictionary")
+    app.config['processors'] = {}
+    
+    # First try to copy existing processors
+    if SOURCE_PROCESSORS:
+        print(f"Using {len(SOURCE_PROCESSORS)} existing processors from SOURCE_PROCESSORS")
+        app.config['processors'] = SOURCE_PROCESSORS
+    
+    # Make sure we can access any already processed sources
+    if SOURCES and not app.config['processors']:
+        print("No existing processors, but sources are available. Will initialize on demand.")
+        
+    print(f"Processor initialization complete. {len(app.config['processors'])} processors registered.")
+except Exception as e:
+    print(f"ERROR during processor initialization: {str(e)}")
+    import traceback
+    traceback.print_exc()
+    # Create empty processors dict as fallback
+    app.config['processors'] = {}
+
+# Initialize processors for sources
+initialize_processors()
+
 def fetch_and_process_webpage(url, source_name):
     """Fetch content from a web page and process it for vector storage"""
     try:
@@ -336,6 +369,32 @@ def fetch_and_process_webpage(url, source_name):
         # Parse HTML content
         print(f"[WEB SCRAPING] Got response ({len(response.content)} bytes), parsing HTML")
         soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract page title
+        page_title = soup.title.string if soup.title else source_name
+        page_title = page_title.strip()
+        print(f"[WEB SCRAPING] Extracted page title: {page_title}")
+        
+        # Create a more descriptive title
+        meta_description = soup.find('meta', attrs={'name': 'description'})
+        if meta_description and meta_description.get('content'):
+            descriptive_title = f"{page_title} - {meta_description.get('content')}"
+        else:
+            # If no meta description, use first paragraph or heading as additional description
+            first_p = soup.find('p')
+            first_h = soup.find(['h1', 'h2'])
+            additional_text = ""
+            if first_h and first_h.text.strip():
+                additional_text = first_h.text.strip()
+            elif first_p and first_p.text.strip():
+                additional_text = first_p.text.strip()
+                
+            if additional_text:
+                descriptive_title = f"{page_title} - {additional_text[:100]}"
+            else:
+                descriptive_title = page_title
+        
+        print(f"[WEB SCRAPING] Created descriptive title: {descriptive_title}")
         
         # Extract text content (remove script and style elements)
         print("[WEB SCRAPING] Removing script, style, header, footer, nav elements")
@@ -365,7 +424,9 @@ def fetch_and_process_webpage(url, source_name):
                     "text": paragraph,
                     "page": "web",
                     "section": source_name,
-                    "source_url": url
+                    "source_url": url,
+                    "title": page_title,
+                    "descriptive_title": descriptive_title
                 })
         
         print(f"[WEB SCRAPING] Created {len(chunks)} chunks from paragraphs")
@@ -391,13 +452,13 @@ def fetch_and_process_webpage(url, source_name):
             'path': source_folder,
             'index_path': index_path,
             'chunks_path': processed_chunks_path,
-            'chunk_count': len(chunks)
+            'chunk_count': len(chunks),
+            'page_title': page_title,
+            'descriptive_title': descriptive_title
         }
     except Exception as e:
         print(f"[WEB SCRAPING] Error processing web page {url}: {str(e)}")
         return {'success': False, 'error': str(e)}
-
-initialize_processors()
 
 # Check if we need to initialize approved websites
 if not APPROVED_WEBSITES:
@@ -511,157 +572,332 @@ def upload_file():
     
     return jsonify({'success': False, 'error': 'Invalid file type'})
 
+def format_ai_response(response):
+    """
+    Format AI response to remove redundant statements about lack of information
+    
+    Args:
+        response (str): The original AI response
+        
+    Returns:
+        str: Formatted response without redundant statements
+    """
+    # List of repetitive phrases to detect
+    repetitive_phrases = [
+        "I do not have enough information to answer accurately",
+        "The provided text focuses on",
+        "Therefore, I do not have enough information",
+        "I don't have enough information",
+        "I do not have sufficient information",
+        "The text does not contain information about",
+        "does not contain information about"
+    ]
+    
+    # If response contains any of these phrases multiple times, simplify it
+    count = 0
+    for phrase in repetitive_phrases:
+        if phrase.lower() in response.lower():
+            count += 1
+    
+    # If we have multiple occurrences of these phrases, simplify the response
+    if count > 1:
+        lines = response.split('\n')
+        simplified_lines = []
+        seen_phrases = set()
+        
+        # Keep track of non-redundant content
+        has_useful_content = False
+        
+        for line in lines:
+            # Check if this line contains any repetitive phrase
+            contains_repetitive = False
+            for phrase in repetitive_phrases:
+                if phrase.lower() in line.lower():
+                    contains_repetitive = True
+                    # If we've seen this kind of phrase before, skip this line
+                    for seen in seen_phrases:
+                        if (phrase.lower() in seen.lower()) or (seen.lower() in phrase.lower()):
+                            break
+                    else:
+                        # This is the first time we're seeing this phrase
+                        seen_phrases.add(line)
+                        simplified_lines.append(line)
+                    break
+            
+            # If this line doesn't contain repetitive phrases, keep it
+            if not contains_repetitive:
+                simplified_lines.append(line)
+                if line.strip() and not line.startswith("Based on") and not line.startswith("I apologize"):
+                    has_useful_content = True
+        
+        # If we have useful content mixed with repetitive phrases, only remove duplicates
+        if has_useful_content:
+            return '\n'.join(simplified_lines)
+        else:
+            # If it's all about lack of information, simplify drastically
+            return "I don't have enough information in the provided sources to answer this question accurately."
+    
+    # If not repetitive, return the original response
+    return response
+
 @app.route('/query', methods=['POST'])
 def process_query():
-    """Process a question about the textbook"""
+    """Process a query against the selected sources using the RAG processor"""
     global QUERY_HISTORY
     
     data = request.json
-    query = data.get('query')
+    query_text = data.get('query', '')
     selected_sources = data.get('sources', [])
+    use_markdown = data.get('useMarkdown', False)
+    requested_language = data.get('language', 'en')
     
-    print(f"Query processing started. Query: '{query}'")
-    print(f"Initial selected sources from request: {selected_sources}")
-    
-    # Special case to handle 'hi' or greetings that might trigger old data
-    if query.lower().strip() in ['hi', 'hello', 'hey']:
-        return jsonify({
-            'success': True,
-            'answer': f"Hello! I'm Lumo, your textbook assistant. How can I help you today?",
-            'sections': [],
-            'pages': [],
-            'language': 'en'
-        })
-    
-    if not query:
-        return jsonify({'success': False, 'error': 'No query provided'})
-    
-    if not SOURCES:
-        print("No sources available in the database")
-        return jsonify({'success': False, 'error': 'No textbooks available in the database. Please upload a textbook first.'})
-    
-    if not selected_sources:
-        # If no sources were explicitly provided in the request, use the globally selected sources
-        selected_sources = SELECTED_SOURCES
-        print(f"No sources in request, using global SELECTED_SOURCES: {selected_sources}")
-        
-        # If still no sources selected, default to all available sources
-        if not selected_sources:
-            selected_sources = list(SOURCES.keys())
-            print(f"No global sources found, defaulting to all: {selected_sources}")
-    
-    print(f"Final selected sources for query: {selected_sources}")
+    print(f"Processing query: {query_text}")
+    print(f"Selected sources: {selected_sources}")
     
     try:
-        # Load processors for selected sources
-        # If a source doesn't have a processor yet, create one
-        processors = []
-        for source in selected_sources:
-            if source in SOURCES:
-                if source not in SOURCE_PROCESSORS:
-                    # Create processor for this source
-                    source_data = SOURCES[source]
-                    processor = RAGProcessor(source_data['index_path'], source_data['chunks_path'])
-                    SOURCE_PROCESSORS[source] = processor
-                    print(f"Created new processor for source: {source}")
-                processors.append(SOURCE_PROCESSORS[source])
-                print(f"Added processor for source: {source}")
+        # Fix for selected_sources being passed as boolean instead of list
+        if isinstance(selected_sources, bool):
+            print(f"Converting selected_sources from boolean {selected_sources} to list")
+            # If True, use all available sources from SELECTED_SOURCES
+            if selected_sources:
+                selected_sources = list(SELECTED_SOURCES)
+                print(f"Using all selected sources: {selected_sources}")
             else:
-                print(f"Warning: Source '{source}' requested but not found in available SOURCES")
+                selected_sources = []
+                print("No sources selected (boolean False)")
         
-        print(f"Total processors loaded: {len(processors)}")
+        # If no sources specified, use all selected sources
+        if not selected_sources and SELECTED_SOURCES:
+            selected_sources = list(SELECTED_SOURCES)
+            print(f"No specific sources requested, using all selected: {selected_sources}")
         
-        if not processors:
-            return jsonify({'success': False, 'error': 'No valid sources selected'})
+        # Validate query
+        if not query_text:
+            return jsonify({'answer': 'No query provided', 'sources': [], 'pages': []}), 200
         
-        # Process the query using all selected processors
-        combined_results = []
-        all_sections = set()
-        all_pages = set()
-        
-        # Query each processor separately
-        for i, processor in enumerate(processors):
-            source_name = selected_sources[i] if i < len(selected_sources) else "Unknown Source"
-            print(f"Processing query with source: {source_name}")
-            query_id = str(uuid.uuid4())
-            
-            # Process query with processor
-            result = processor.process_query(
-                query_id,
-                query,
-                top_k=3  # Fewer results per source when using multiple sources
-            )
-            
-            print(f"Result from {source_name}: Answer length: {len(result['Answer'])}, Sections: {result['Sections']}, Pages: {result['Pages']}")
-            
-            # Only add non-empty results
-            if result['Answer'].strip():
-                # Collect sections with source attribution
-                if result['Sections']:
-                    sections = result['Sections'].split(', ')
-                    for section in sections:
-                        if section:
-                            all_sections.add(f"{source_name}: {section}")
+        # Validate sources
+        if not selected_sources:
+            error_msg = "No sources selected. Please select at least one source."
                 
-                # Collect pages with source attribution
-                if result['Pages']:
-                    pages = result['Pages'].split(', ')
-                    all_pages.add(f"{source_name}: {', '.join(pages)}")
+            # Translate error message if needed
+            if requested_language != 'en':
+                error_msg = translate_to_language(error_msg, requested_language)
+                    
+            return jsonify({
+                'answer': error_msg,
+                'sources': [],
+                'pages': []
+            }), 200
+            
+        # Initialize all processors if not already done
+        if 'processors' not in app.config:
+            print("WARNING: processors not found in app.config, initializing now")
+            app.config['processors'] = {}
+        
+        # Combined list to store all results
+        all_results = []
+        all_sections = []
+        all_pages = []
+        
+        # Log the query
+        print(f"Processing query: {query_text}")
+        print(f"Selected sources: {selected_sources}")
+        
+        # Process each selected source
+        for source_name in selected_sources:
+            print(f"Processing source: {source_name}")
+            
+            # Check if the source has a processor
+            if source_name not in app.config['processors']:
+                print(f"Processor not found for {source_name}, attempting to create one")
+                # Find the source file and paths based on existing SOURCES data
+                try:
+                    if source_name in SOURCES:
+                        source_data = SOURCES[source_name]
+                        index_path = source_data['index_path']
+                        chunks_path = source_data['chunks_path']
+                        
+                        # Check if files exist
+                        if not os.path.exists(index_path):
+                            print(f"ERROR: Index file not found: {index_path}")
+                            continue
+                            
+                        if not os.path.exists(chunks_path):
+                            print(f"ERROR: Chunks file not found: {chunks_path}")
+                            continue
+                        
+                        # Create processor
+                        processor = RAGProcessor(index_path=index_path, chunks_path=chunks_path)
+                        app.config['processors'][source_name] = processor
+                        SOURCE_PROCESSORS[source_name] = processor
+                        print(f"Created processor for: {source_name}")
+                    else:
+                        print(f"ERROR: Source {source_name} not found in SOURCES dictionary")
+                        continue
+                except Exception as e:
+                    print(f"ERROR initializing processor for {source_name}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            # Get processor for this source
+            try:
+                processor = app.config['processors'][source_name]
+                if processor is None:
+                    print(f"ERROR: Processor for {source_name} is None")
+                    continue
+                    
+                # Process the query
+                try:
+                    print(f"Sending query to processor for {source_name}")
+            result = processor.process_query(
+                        query_id=str(uuid.uuid4()), 
+                        query_text=query_text,
+                        language=requested_language
+                    )
+                    
+                    # DEBUG: Print full result structure
+                    print(f"[DEBUG] Full result from {source_name}:")
+                    print(f"Result type: {type(result)}")
+                    print(f"Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+                    for key, value in result.items():
+                        print(f"  - {key}: {type(value)} = {str(value)[:100]}{'...' if len(str(value)) > 100 else ''}")
                 
                 # Add to combined results
-                combined_results.append({
+                    all_results.append({
                     'source': source_name,
-                    'answer': result['Answer']
-                })
-                print(f"Added result from {source_name} to combined results")
+                        'answer': result.get('answer', '')  # Use get() for safety
+                    })
+                    
+                    # Add source-specific sections and pages with verbose error checking
+                    print(f"[DEBUG] Processing sections and pages")
+                    if 'sections' in result:
+                        print(f"[DEBUG] Sections found: {type(result['sections'])} = {result['sections']}")
+                        if isinstance(result['sections'], list):
+                            for section in result['sections']:
+                                try:
+                                    section = str(section).strip()
+                                    if section and section not in all_sections:
+                                        all_sections.append(section)
+                                except Exception as section_error:
+                                    print(f"[DEBUG] Error processing section {section}: {str(section_error)}")
+                        else:
+                            print(f"[DEBUG] Sections not a list: {type(result['sections'])}")
+                    else:
+                        print("[DEBUG] No sections found in result")
+                    
+                    if 'pages' in result:
+                        print(f"[DEBUG] Pages found: {type(result['pages'])} = {result['pages']}")
+                        if isinstance(result['pages'], list):
+                            for page in result['pages']:
+                                try:
+                                    page = str(page).strip()
+                                    if page and page not in all_pages:
+                                        all_pages.append(page)
+                                except Exception as page_error:
+                                    print(f"[DEBUG] Error processing page {page}: {str(page_error)}")
+                        else:
+                            print(f"[DEBUG] Pages not a list: {type(result['pages'])}")
+                    else:
+                        print("[DEBUG] No pages found in result")
+                    
+                    print(f"Processed query against source: {source_name}")
+                except Exception as e:
+                    print(f"ERROR processing query against {source_name}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            except Exception as e:
+                print(f"ERROR accessing processor for {source_name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                continue
         
-        print(f"Total results collected: {len(combined_results)}")
-        
-        if not combined_results:
+        # Combine all answers into one
+        if not all_results:
+            # No results from any source
+            error_msg = "Failed to process query against any source. Please try again or select different sources."
+            
+            # Translate error message if needed
+            if requested_language != 'en':
+                error_msg = translate_to_language(error_msg, requested_language)
+                
             return jsonify({
-                'success': True,
-                'answer': "I couldn't find relevant information about this in the selected textbooks.",
-                'sections': [],
-                'pages': [],
-                'language': 'en'
-            })
+                'answer': error_msg,
+                'sources': [],
+                'pages': []
+            }), 200
         
-        # Combine answers from all sources
-        combined_answer = ""
+        # If we have only one result, use it directly
+        if len(all_results) == 1:
+            combined_answer = all_results[0]['answer']
+        else:
+            # Combine answers with source attribution
+            combined_answer = "Here are answers from different sources:\n\n"
+            for result in all_results:
+                combined_answer += f"From {result['source']}:\n{result['answer']}\n\n"
         
-        for i, result in enumerate(combined_results):
-            if i > 0:
-                combined_answer += "\n\n"
-            combined_answer += f"From {result['source']}:\n{result['answer']}"
+        # Format the response to remove redundancy
+        formatted_answer = format_ai_response(combined_answer)
         
-        print(f"Final combined answer length: {len(combined_answer)}, Sections: {len(all_sections)}, Pages: {len(all_pages)}")
-        
-        # Store in query history for CSV export
+        # Save query to history
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        history_entry = {
+        query_record = {
             'timestamp': timestamp,
-            'query_id': str(uuid.uuid4()),
-            'query': query,
-            'answer': combined_answer,
-            'sources': ", ".join(selected_sources),
-            'sections': ", ".join(all_sections),
-            'pages': ", ".join(all_pages),
-            'language': 'en'
+            'query': query_text,
+            'answer': formatted_answer,  # Use the formatted answer
+            'sources': ', '.join(selected_sources),
+            'sections': ', '.join(all_sections),
+            'pages': ', '.join(all_pages)
         }
-        QUERY_HISTORY.append(history_entry)
         
+        # Load existing history
+        history_path = os.path.join(app.config['UPLOAD_FOLDER'], 'history.json')
+        history = []
+        if os.path.exists(history_path):
+            try:
+                with open(history_path, 'r') as f:
+                    history = json.load(f)
+            except:
+                history = []
+        
+        # Add new record and save
+        history.append(query_record)
+        with open(history_path, 'w') as f:
+            json.dump(history, f, indent=2)
+        
+        # Return combined results
         return jsonify({
             'success': True,
-            'answer': combined_answer,
-            'sections': list(all_sections),
-            'pages': list(all_pages),
-            'language': 'en'
-        })
+            'answer': formatted_answer,  # Use the formatted answer
+            'sources': all_sections,
+            'pages': all_pages
+        }), 200
+        
     except Exception as e:
-        print(f"Error processing query: {str(e)}")
+        print(f"Error in process_query: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)})
+        
+        # Get detailed error information for debugging
+        import sys
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        error_details = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        error_msg = f"Error processing query: {str(e)}\n\nDetails: {''.join(error_details[-5:])}"
+        print(f"DETAILED ERROR: {error_msg}")
+        
+        # Provide a cleaner message to the user
+        user_error_msg = f"Error processing query: {str(e)}"
+        
+        # Translate error message if needed
+        if 'requested_language' in locals() and requested_language != 'en':
+            user_error_msg = translate_to_language(user_error_msg, requested_language)
+            
+        return jsonify({
+            'answer': user_error_msg,
+            'sources': [],
+            'pages': []
+        }), 500
 
 @app.route('/export-csv', methods=['GET'])
 def export_csv():
@@ -894,6 +1130,8 @@ def add_website():
             'index_path': result['index_path'],
             'chunks_path': result['chunks_path'],
             'chunk_count': result['chunk_count'],
+            'page_title': result.get('page_title', name),
+            'descriptive_title': result.get('descriptive_title', ''),
             'added_on': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
@@ -940,18 +1178,23 @@ def process_web_query():
     data = request.json
     query = data.get('query')
     selected_websites = data.get('websites', [])
+    language = data.get('language', 'en')  # Get user language preference
     
     # Add more detailed debugging
     print(f"\n[WEB SEARCH] Query: '{query}'")
     print(f"[WEB SEARCH] Selected websites: {selected_websites}")
     print(f"[WEB SEARCH] Total approved websites: {len(APPROVED_WEBSITES)}")
+    print(f"[WEB SEARCH] Requested language: {language}")
     
     if not query:
         return jsonify({'success': False, 'error': 'No query provided'})
     
     if not APPROVED_WEBSITES:
         print("[WEB SEARCH] No approved websites available")
-        return jsonify({'success': False, 'error': 'No approved websites available'})
+        error_msg = 'No approved websites available'
+        if language != 'en':
+            error_msg = translate_to_language(error_msg, language)
+        return jsonify({'success': False, 'error': error_msg})
     
     if not selected_websites:
         # If no websites selected, use all available
@@ -959,12 +1202,104 @@ def process_web_query():
         print(f"[WEB SEARCH] No specific websites selected, using all: {selected_websites}")
     
     try:
-        # Print detailed info about website data
+        # Generate embedding for the query to use for semantic title matching
+        import google.generativeai as genai
+        from sklearn.metrics.pairwise import cosine_similarity
+        import numpy as np
+        
+        # Set up the embedding model (reuse from RAGProcessor if possible)
+        embedding_model = None
+        for key, processor in WEB_SOURCE_PROCESSORS.items():
+            if processor and hasattr(processor, 'embedding_model'):
+                embedding_model = processor.embedding_model
+                break
+        
+        if not embedding_model:
+            # If no processor has an embedding model, create one
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+                embedding_model = genai.GenerativeModel("embedding-001")
+        
+        # Function to get title relevance score
+        def get_title_relevance(website_name, query_text):
+            website = APPROVED_WEBSITES.get(website_name)
+            if not website:
+                return 0
+                
+            # Get the descriptive title
+            title = website.get('descriptive_title', website.get('page_title', ''))
+            if not title:
+                return 0
+                
+            # First check for PDF files which may have generic titles but specific content
+            is_pdf = False
+            url = website.get('url', '').lower()
+            if url.endswith('.pdf') or '/pdf/' in url:
+                print(f"[WEB SEARCH] {website_name} is a PDF document, giving higher base relevance")
+                is_pdf = True
+                # Give PDF files a base relevance score
+                base_relevance = 0.3
+            else:
+                base_relevance = 0
+            
+            # Simple keyword matching for efficiency
+            query_words = set(query_text.lower().split())
+            title_words = set(title.lower().split())
+            
+            # Count matching words
+            matching_words = query_words.intersection(title_words)
+            word_match_score = len(matching_words) / len(query_words) if query_words else 0
+            
+            # Combine scores - PDF files get a boost plus any word matching
+            if is_pdf:
+                return max(base_relevance, word_match_score)
+            else:
+                return word_match_score
+            
+        # Filter websites by title relevance
+        filtered_websites = []
+        relevance_scores = {}
+        
+        print(f"[WEB SEARCH] Filtering {len(selected_websites)} websites by title relevance")
         for website_name in selected_websites:
+            relevance = get_title_relevance(website_name, query)
+            relevance_scores[website_name] = relevance
+            
+            # Keep websites with any relevance
+            if relevance > 0:
+                filtered_websites.append(website_name)
+                print(f"[WEB SEARCH] Website '{website_name}' has title relevance score: {relevance:.2f}")
+            else:
+                print(f"[WEB SEARCH] Website '{website_name}' has no title relevance")
+        
+        # If no relevant websites found, use a subset of all websites to avoid empty results
+        if not filtered_websites:
+            print("[WEB SEARCH] No websites with relevant titles found, using subset of all websites")
+            filtered_websites = selected_websites[:min(3, len(selected_websites))]
+            print(f"[WEB SEARCH] Using {len(filtered_websites)} websites as fallback")
+        else:
+            # Sort by relevance
+            filtered_websites.sort(key=lambda x: relevance_scores.get(x, 0), reverse=True)
+            # Limit to top 5 most relevant
+            filtered_websites = filtered_websites[:min(5, len(filtered_websites))]
+            print(f"[WEB SEARCH] Selected top {len(filtered_websites)} websites by title relevance")
+        
+        # Print info about the filtered websites
+        for website_name in filtered_websites:
+            website = APPROVED_WEBSITES.get(website_name, {})
+            title = website.get('descriptive_title', website.get('page_title', ''))
+            print(f"[WEB SEARCH] Will search website: {website_name} - {title}")
+            print(f"[WEB SEARCH] Relevance score: {relevance_scores.get(website_name, 0):.2f}")
+        
+        # Print detailed info about website data for the filtered websites
+        for website_name in filtered_websites:
             if website_name in APPROVED_WEBSITES:
                 website_data = APPROVED_WEBSITES[website_name]
                 print(f"[WEB SEARCH] Website {website_name}:")
                 print(f"  - URL: {website_data.get('url', 'N/A')}")
+                print(f"  - Title: {website_data.get('page_title', 'N/A')}")
+                print(f"  - Descriptive Title: {website_data.get('descriptive_title', 'N/A')}")
                 print(f"  - Chunks path: {website_data.get('chunks_path', 'N/A')}")
                 print(f"  - Index path: {website_data.get('index_path', 'N/A')}")
                 print(f"  - Chunk count: {website_data.get('chunk_count', 0)}")
@@ -985,7 +1320,7 @@ def process_web_query():
         website_names = []
         source_urls = {}
         
-        for website in selected_websites:
+        for website in filtered_websites:
             if website in APPROVED_WEBSITES:
                 if website not in WEB_SOURCE_PROCESSORS:
                     # Create processor for this website
@@ -1003,7 +1338,10 @@ def process_web_query():
         
         if not processors:
             print("[WEB SEARCH] No valid website processors available")
-            return jsonify({'success': False, 'error': 'No valid websites selected'})
+            error_msg = 'No valid websites selected'
+            if language != 'en':
+                error_msg = translate_to_language(error_msg, language)
+            return jsonify({'success': False, 'error': error_msg})
         
         print(f"[WEB SEARCH] Starting sequential search with {len(processors)} website processors")
         
@@ -1024,10 +1362,10 @@ def process_web_query():
             print(f"[WEB SEARCH] Processing {website_name}...")
             
             try:
-                # Process query
-                result = processor.process_query(
-                    query_id,
-                    query,
+                # Process query (always in English for now, translation happens later)
+            result = processor.process_query(
+                query_id,
+                query,
                     top_k=8  # Increase from 5 to 8 to get more context
                 )
                 
@@ -1036,24 +1374,24 @@ def process_web_query():
                 print(f"[WEB SEARCH] {website_name} completed in {processing_time:.2f}s")
                 
                 # Add more detailed debug about the result
-                answer_length = len(result['Answer']) if 'Answer' in result else 0
-                context_length = len(result['Context']) if 'Context' in result else 0
+                answer_length = len(result['answer']) if 'answer' in result else 0
+                context_length = len(result['context']) if 'context' in result else 0
                 print(f"[WEB SEARCH] {website_name} result:")
                 print(f"  - Answer length: {answer_length} chars")
                 print(f"  - Context length: {context_length} chars")
                 print(f"  - Has answer: {'Yes' if answer_length > 0 else 'No'}")
                 
                 # Lower threshold for accepting answers - accept anything with content
-                if result['Answer'] and len(result['Answer'].strip()) > 0:
-                    combined_results.append(result)
+                if result['answer'] and len(result['answer'].strip()) > 0:
+                combined_results.append(result)
                     used_sources.add(website_name)
                     print(f"[WEB SEARCH] Got valid answer from {website_name} ({processing_time:.2f}s)")
-                    print(f"[WEB SEARCH] Answer preview: {result['Answer'][:100]}...")
-                else:
+                    print(f"[WEB SEARCH] Answer preview: {result['answer'][:100]}...")
+            else:
                     print(f"[WEB SEARCH] No valid answer from {website_name} ({processing_time:.2f}s)")
                     # Print the context to debug why no answer was generated
-                    if 'Context' in result and result['Context']:
-                        print(f"[WEB SEARCH] Context preview: {result['Context'][:100]}...")
+                    if 'context' in result and result['context']:
+                        print(f"[WEB SEARCH] Context preview: {result['context'][:100]}...")
                     else:
                         print(f"[WEB SEARCH] No context available")
                 
@@ -1071,18 +1409,29 @@ def process_web_query():
         
         if not combined_results:
             print("[WEB SEARCH] No results found from any web source")
+            not_found_msg = "I couldn't find relevant information from the approved web sources."
+            if language != 'en':
+                not_found_msg = translate_to_language(not_found_msg, language)
             return jsonify({
                 'success': True,
-                'answer': "I couldn't find relevant information from the approved web sources.",
+                'answer': not_found_msg,
                 'sections': [],
                 'pages': [],
-                'language': 'en',
+                'language': language,
                 'web_sources': [],
                 'processing_time': f"{total_time:.2f}s"
             })
         
+        # Format strings for translation
+        source_prefix = "From"
+        
+        # If not English, translate the source prefix
+        if language != 'en':
+            source_prefix = translate_to_language(source_prefix, language)
+        
         # Combine results (simple approach - concatenate with source attribution)
         combined_answer = ""
+        english_answer = ""  # Store original English answer for history
         all_sections = set()
         all_sources = []
         
@@ -1093,15 +1442,32 @@ def process_web_query():
             # Add source attribution
             if i > 0:
                 combined_answer += "\n\n"
+                english_answer += "\n\n"
             
-            combined_answer += f"From {source_name}:\n{result['Answer']}"
+            # Store original English answer
+            english_answer += f"From {source_name}:\n{result['answer']}"
+            
+            # Translate answer if needed
+            answer = result['answer']
+            if language != 'en':
+                answer = translate_to_language(answer, language)
+            
+            combined_answer += f"{source_prefix} {source_name}:\n{answer}"
             
             # Collect sections
-            if result['Sections']:
-                sections = result['Sections'].split(", ")
-                for section in sections:
-                    if section:
-                        all_sections.add(f"{source_name}: {section}")
+            if 'sections' in result and isinstance(result['sections'], list):
+                # Handle sections as a list
+                for section in result['sections']:
+                    section = str(section).strip()
+                    if section and section not in all_sections:
+                        all_sections.append(section)
+            
+            if 'pages' in result and isinstance(result['pages'], list):
+                # Handle pages as a list
+                for page in result['pages']:
+                    page = str(page).strip()
+                    if page and page not in all_pages:
+                        all_pages.append(page)
             
             # Add source reference
             all_sources.append({
@@ -1116,17 +1482,17 @@ def process_web_query():
         print(f"[WEB SEARCH] Web sources: {', '.join([s['name'] for s in all_sources])}")
         print(f"[WEB SEARCH] Combined answer length: {len(combined_answer)} chars")
         
-        # Store in query history
+        # Store in query history (original English answer)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         history_entry = {
             'timestamp': timestamp,
             'query_id': str(uuid.uuid4()),
             'query': query,
-            'answer': combined_answer,
+            'answer': english_answer, # Store original English answer
             'sources': ", ".join([s['name'] for s in all_sources]),
             'sections': ", ".join(all_sections),
             'pages': ", ".join(page_refs),
-            'language': 'en',
+            'language': language,
             'type': 'web_query',
             'processing_time': f"{total_time:.2f}s"
         }
@@ -1137,7 +1503,7 @@ def process_web_query():
             'answer': combined_answer,
             'sections': list(all_sections),
             'pages': page_refs,
-            'language': 'en',
+            'language': language,
             'web_sources': all_sources,
             'processing_time': f"{total_time:.2f}s"
         })
@@ -1145,7 +1511,23 @@ def process_web_query():
         print(f"[WEB SEARCH] Error processing web query: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)})
+        
+        # Get detailed error information for debugging
+        import sys
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        error_details = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        error_msg = f"Error processing web query: {str(e)}\n\nDetails: {''.join(error_details[-5:])}"
+        print(f"[WEB SEARCH] DETAILED ERROR: {error_msg}")
+        
+        # Provide a cleaner message to the user
+        user_error_msg = str(e)
+        
+        if language != 'en':
+            user_error_msg = translate_to_language(user_error_msg, language)
+        return jsonify({'success': False, 'error': user_error_msg})
+
+        return ""
+        return text
 
 @app.route('/combined-query', methods=['POST'])
 def process_combined_query():
@@ -1157,11 +1539,13 @@ def process_combined_query():
     selected_sources = data.get('sources', [])
     selected_websites = data.get('websites', [])
     use_markdown = data.get('useMarkdown', False)
+    language = data.get('language', 'en')  # Get the requested language
     
     print(f"\n[COMBINED SEARCH] Query: '{limit_text_for_display(query)}'")
     print(f"[COMBINED SEARCH] Selected textbooks: {selected_sources}")
     print(f"[COMBINED SEARCH] Selected websites: {selected_websites}")
     print(f"[COMBINED SEARCH] Use markdown: {use_markdown}")
+    print(f"[COMBINED SEARCH] Requested language: {language}")
     
     if not query:
         return jsonify({'success': False, 'error': 'No query provided'})
@@ -1169,9 +1553,81 @@ def process_combined_query():
     # Check if we have any sources available
     if not selected_sources and not selected_websites:
         print("[COMBINED SEARCH] No sources selected (neither textbooks nor websites)")
-        return jsonify({'success': False, 'error': 'No sources selected'})
+        error_msg = 'No sources selected'
+        if language != 'en':
+            error_msg = translate_to_language(error_msg, language)
+        return jsonify({'success': False, 'error': error_msg})
     
     try:
+        # Filter websites by title relevance first
+        if selected_websites and APPROVED_WEBSITES:
+            # Function to get title relevance score - same as in process_web_query
+            def get_title_relevance(website_name, query_text):
+                website = APPROVED_WEBSITES.get(website_name)
+                if not website:
+                    return 0
+                    
+                # Get the descriptive title
+                title = website.get('descriptive_title', website.get('page_title', ''))
+                if not title:
+                    return 0
+                
+                # First check for PDF files which may have generic titles but specific content
+                is_pdf = False
+                url = website.get('url', '').lower()
+                if url.endswith('.pdf') or '/pdf/' in url:
+                    print(f"[COMBINED SEARCH] {website_name} is a PDF document, giving higher base relevance")
+                    is_pdf = True
+                    # Give PDF files a base relevance score
+                    base_relevance = 0.3
+                else:
+                    base_relevance = 0
+                
+                # Simple keyword matching for efficiency
+                query_words = set(query_text.lower().split())
+                title_words = set(title.lower().split())
+                
+                # Count matching words
+                matching_words = query_words.intersection(title_words)
+                word_match_score = len(matching_words) / len(query_words) if query_words else 0
+                
+                # Combine scores - PDF files get a boost plus any word matching
+                if is_pdf:
+                    return max(base_relevance, word_match_score)
+                else:
+                    return word_match_score
+            
+            # Filter websites by title relevance
+            filtered_websites = []
+            relevance_scores = {}
+            
+            print(f"[COMBINED SEARCH] Filtering {len(selected_websites)} websites by title relevance")
+            for website_name in selected_websites:
+                relevance = get_title_relevance(website_name, query)
+                relevance_scores[website_name] = relevance
+                
+                # Keep websites with any relevance
+                if relevance > 0:
+                    filtered_websites.append(website_name)
+                    print(f"[COMBINED SEARCH] Website '{website_name}' has title relevance score: {relevance:.2f}")
+                else:
+                    print(f"[COMBINED SEARCH] Website '{website_name}' has no title relevance")
+            
+            # If no relevant websites found, use a subset of all websites to avoid empty results
+            if not filtered_websites:
+                print("[COMBINED SEARCH] No websites with relevant titles found, using subset of all websites")
+                filtered_websites = selected_websites[:min(3, len(selected_websites))]
+                print(f"[COMBINED SEARCH] Using {len(filtered_websites)} websites as fallback")
+            else:
+                # Sort by relevance
+                filtered_websites.sort(key=lambda x: relevance_scores.get(x, 0), reverse=True)
+                # Limit to top 5 most relevant
+                filtered_websites = filtered_websites[:min(5, len(filtered_websites))]
+                print(f"[COMBINED SEARCH] Selected top {len(filtered_websites)} websites by title relevance")
+                
+            # Replace original selected_websites with filtered ones
+            selected_websites = filtered_websites
+        
         from concurrent.futures import ThreadPoolExecutor, as_completed
         import time
         import gc  # Garbage collector
@@ -1185,7 +1641,8 @@ def process_combined_query():
             textbook_data = {
                 'query': query,
                 'sources': selected_sources,
-                'useMarkdown': use_markdown
+                'useMarkdown': use_markdown,
+                'language': 'en'  # Always process in English
             }
             print(f"[COMBINED SEARCH] Will query textbooks: {selected_sources}")
         
@@ -1195,7 +1652,8 @@ def process_combined_query():
             web_data = {
                 'query': query,
                 'websites': selected_websites,
-                'useMarkdown': use_markdown
+                'useMarkdown': use_markdown,
+                'language': 'en'  # Always process in English
             }
             print(f"[COMBINED SEARCH] Will query websites: {selected_websites}")
         
@@ -1229,18 +1687,39 @@ def process_combined_query():
         if textbook_data:
             print("[COMBINED SEARCH] Running textbook search")
             try:
-                results['textbook'] = process_textbook_query()
+                # Make sure processors dictionary is initialized
+                if 'processors' not in app.config:
+                    print("[COMBINED SEARCH] WARNING: processors not found in app.config, initializing now")
+                    app.config['processors'] = SOURCE_PROCESSORS
+
+                textbook_result = process_textbook_query()
+                if isinstance(textbook_result, tuple):
+                    # Handle tuple response (response, status_code)
+                    results['textbook'] = textbook_result[0]
+                    if hasattr(results['textbook'], 'get_json'):
+                        results['textbook'] = results['textbook'].get_json()
+                else:
+                    results['textbook'] = textbook_result
                 print("[COMBINED SEARCH] Textbook search completed")
                 # Force garbage collection after task
                 gc.collect()
             except Exception as e:
                 print(f"[COMBINED SEARCH] Error processing textbook search: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 results['textbook'] = {'success': False, 'error': str(e)}
         
         if web_data:
             print("[COMBINED SEARCH] Running web search")
             try:
-                results['web'] = process_web_search()
+                web_result = process_web_search()
+                if isinstance(web_result, tuple):
+                    # Handle tuple response (response, status_code)
+                    results['web'] = web_result[0]
+                    if hasattr(results['web'], 'get_json'):
+                        results['web'] = results['web'].get_json()
+                else:
+                    results['web'] = web_result
                 print("[COMBINED SEARCH] Web search completed")
                 # Force garbage collection after task
                 gc.collect()
@@ -1260,13 +1739,24 @@ def process_combined_query():
         
         if not textbook_success and not web_success:
             print("[COMBINED SEARCH] No successful results from any source")
+            error_msg = 'No results found from any of the selected sources'
+            if language != 'en':
+                error_msg = translate_to_language(error_msg, language)
             return jsonify({
                 'success': False, 
-                'error': 'No results found from any of the selected sources'
+                'error': error_msg
             })
         
+        # Format strings for translation
+        textbook_header = "From textbooks:"
+        
+        # If not English, translate headers
+        if language != 'en':
+            textbook_header = translate_to_language(textbook_header, language)
+            
         # Combine all successful results
         combined_answer = ""
+        english_answer = ""  # For storing in history
         all_sections = []
         all_pages = []
         all_web_sources = []
@@ -1274,42 +1764,125 @@ def process_combined_query():
         # Add textbook results
         if textbook_success:
             print("[COMBINED SEARCH] Adding textbook results")
-            textbook_answer = textbook_result.get('answer', '')
-            if textbook_answer:
-                combined_answer += "From textbooks:\n" + textbook_answer
+            try:
+                print(f"[DEBUG] Textbook result keys: {list(textbook_result.keys()) if isinstance(textbook_result, dict) else 'Not a dict'}")
+                textbook_answer = textbook_result.get('answer', '')
+                print(f"[DEBUG] Textbook answer type: {type(textbook_answer)}, length: {len(str(textbook_answer))}")
                 
-            # Add sections and pages
-            if 'sections' in textbook_result:
-                all_sections.extend([f"Textbook: {s}" for s in textbook_result['sections']])
-            
-            if 'pages' in textbook_result:
-                all_pages.extend(textbook_result['pages'])
+                if textbook_answer:
+                    # Store original English answer
+                    english_answer += "From textbooks:\n" + textbook_answer
+                    
+                    # Translate if needed
+                    if language != 'en':
+                        textbook_answer = translate_to_language(textbook_answer, language)
+                        
+                    combined_answer += textbook_header + "\n" + textbook_answer
+                
+                # Add sections and pages with detailed error checking
+                print(f"[DEBUG] Processing textbook sections and pages")
+                
+                # Process sections with error checking
+                if 'sections' in textbook_result:
+                    print(f"[DEBUG] Textbook sections found: {type(textbook_result['sections'])} = {textbook_result['sections']}")
+                    if isinstance(textbook_result['sections'], list):
+                        for section in textbook_result['sections']:
+                            try:
+                                section_str = f"Textbook: {str(section)}"
+                                if section_str not in all_sections:
+                                    all_sections.append(section_str)
+                            except Exception as section_error:
+                                print(f"[DEBUG] Error processing textbook section {section}: {str(section_error)}")
+                    else:
+                        print(f"[DEBUG] Textbook sections not a list: {type(textbook_result['sections'])}")
+                
+                # Process pages with error checking
+                if 'pages' in textbook_result:
+                    print(f"[DEBUG] Textbook pages found: {type(textbook_result['pages'])} = {textbook_result['pages']}")
+                    if isinstance(textbook_result['pages'], list):
+                        for page in textbook_result['pages']:
+                            try:
+                                page_str = str(page)
+                                if page_str not in all_pages:
+                                    all_pages.append(page_str)
+                            except Exception as page_error:
+                                print(f"[DEBUG] Error processing textbook page {page}: {str(page_error)}")
+                    else:
+                        print(f"[DEBUG] Textbook pages not a list: {type(textbook_result['pages'])}")
+            except Exception as textbook_error:
+                print(f"[DEBUG] Error processing textbook results: {str(textbook_error)}")
+                import traceback
+                traceback.print_exc()
         
         # Add web results
         if web_success:
             print("[COMBINED SEARCH] Adding web results")
-            web_answer = web_result.get('answer', '')
-            if web_answer:
-                if combined_answer:
-                    combined_answer += "\n\n"
-                combined_answer += web_answer
-            
-            # Add sections
-            if 'sections' in web_result:
-                all_sections.extend(web_result['sections'])
-            
-            # Add pages
-            if 'pages' in web_result:
-                all_pages.extend(web_result['pages'])
-            
-            # Add web sources
-            if 'web_sources' in web_result:
-                all_web_sources.extend(web_result['web_sources'])
+            try:
+                print(f"[DEBUG] Web result keys: {list(web_result.keys()) if isinstance(web_result, dict) else 'Not a dict'}")
+                web_answer = web_result.get('answer', '')
+                print(f"[DEBUG] Web answer type: {type(web_answer)}, length: {len(str(web_answer))}")
                 
-            # Print debug info about the web result
-            print(f"[COMBINED SEARCH] Web answer length: {len(web_answer)}")
-            print(f"[COMBINED SEARCH] Web sections: {len(web_result.get('sections', []))}")
-            print(f"[COMBINED SEARCH] Web sources: {len(web_result.get('web_sources', []))}")
+                if web_answer:
+            if combined_answer:
+                        combined_answer += "\n\n"
+                        english_answer += "\n\n"
+                    
+                    # Store original English answer
+                    english_answer += web_answer
+                    
+                    # Translate if needed
+                    if language != 'en':
+                        web_answer = translate_to_language(web_answer, language)
+                        
+                    combined_answer += web_answer
+                
+                # Process sections with error checking
+                print(f"[DEBUG] Processing web sections and pages")
+                if 'sections' in web_result:
+                    print(f"[DEBUG] Web sections found: {type(web_result['sections'])} = {web_result['sections']}")
+                    if isinstance(web_result['sections'], list):
+                        for section in web_result['sections']:
+                            try:
+                                section_str = str(section).strip()
+                                if section_str and section_str not in all_sections:
+                                    all_sections.append(section_str)
+                            except Exception as section_error:
+                                print(f"[DEBUG] Error processing web section {section}: {str(section_error)}")
+            else:
+                        print(f"[DEBUG] Web sections not a list: {type(web_result['sections'])}")
+                
+                # Process pages with error checking
+                if 'pages' in web_result:
+                    print(f"[DEBUG] Web pages found: {type(web_result['pages'])} = {web_result['pages']}")
+                    if isinstance(web_result['pages'], list):
+                        for page in web_result['pages']:
+                            try:
+                                page_str = str(page).strip()
+                                if page_str and page_str not in all_pages:
+                                    all_pages.append(page_str)
+                            except Exception as page_error:
+                                print(f"[DEBUG] Error processing web page {page}: {str(page_error)}")
+                    else:
+                        print(f"[DEBUG] Web pages not a list: {type(web_result['pages'])}")
+                
+                web_answer = web_result.get('answer', '')
+                if 'web_sources' in web_result:
+                    print(f"[DEBUG] Web sources found: {type(web_result['web_sources'])} = {web_result['web_sources']}")
+                    try:
+                        all_web_sources.extend(web_result['web_sources'])
+                    except Exception as sources_error:
+                        print(f"[DEBUG] Error processing web sources: {str(sources_error)}")
+                        # Try to recover by adding each source one by one
+                        if isinstance(web_result['web_sources'], list):
+                            for source in web_result['web_sources']:
+                                try:
+                                    all_web_sources.append(source)
+                                except Exception as single_source_error:
+                                    print(f"[DEBUG] Error adding web source {source}: {str(single_source_error)}")
+            except Exception as web_error:
+                print(f"[DEBUG] Error processing web results: {str(web_error)}")
+                import traceback
+                traceback.print_exc()
         
         print(f"[COMBINED SEARCH] Combined answer created successfully")
         print(f"[COMBINED SEARCH] Final answer length: {len(combined_answer)}")
@@ -1317,17 +1890,17 @@ def process_combined_query():
         print(f"[COMBINED SEARCH] Final pages: {len(all_pages)}")
         print(f"[COMBINED SEARCH] Final web sources: {len(all_web_sources)}")
         
-        # Store in query history
+        # Store in query history (original English answer)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         history_entry = {
             'timestamp': timestamp,
             'query_id': str(uuid.uuid4()),
             'query': query,
-            'answer': combined_answer,
+            'answer': english_answer, # Store original English answer
             'sources': ", ".join([s['name'] for s in all_web_sources]) if all_web_sources else "Textbooks",
             'sections': ", ".join(all_sections),
             'pages': ", ".join(all_pages),
-            'language': 'en',
+            'language': language,
             'type': 'combined_query'
         }
         QUERY_HISTORY.append(history_entry)
@@ -1337,14 +1910,27 @@ def process_combined_query():
             'answer': combined_answer,
             'sections': all_sections,
             'pages': all_pages,
-            'language': 'en',
+            'language': language,
             'web_sources': all_web_sources
         })
     except Exception as e:
         print(f"[COMBINED SEARCH] Error processing combined query: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)})
+        
+        # Get detailed error information for debugging
+        import sys
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        error_details = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        error_msg = f"Error processing combined query: {str(e)}\n\nDetails: {''.join(error_details[-5:])}"
+        print(f"[COMBINED SEARCH] DETAILED ERROR: {error_msg}")
+        
+        # Provide a cleaner message to the user
+        user_error_msg = f"Error processing combined query: {str(e)}"
+        
+        if language != 'en':
+            user_error_msg = translate_to_language(user_error_msg, language)
+        return jsonify({'success': False, 'error': user_error_msg})
 
 @app.route('/books', methods=['GET'])
 def get_books():

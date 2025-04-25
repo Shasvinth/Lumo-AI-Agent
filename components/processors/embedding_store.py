@@ -57,9 +57,14 @@ class EmbeddingStore:
         self.index = None
         self.chunks = []
         
+        # Add caching for embeddings to improve performance
+        self.embedding_cache = {}
+        self.cache_hits = 0
+        self.cache_misses = 0
+        
     def get_embedding(self, text, max_retries=3):
         """
-        Get embedding for a text using Gemini API with retry mechanism
+        Get embedding for a text using Gemini API with retry mechanism and caching
         
         Args:
             text (str): Text to embed
@@ -68,12 +73,40 @@ class EmbeddingStore:
         Returns:
             numpy.ndarray: Embedding vector
         """
-        # Trim extremely long texts to avoid API issues
-        if len(text) > 100000:  # 100K characters max
-            print_warning(f"Text too long ({len(text)} chars), truncating...")
-            text = text[:100000]
+        # Check if input is already a numpy array (pre-computed embedding)
+        if isinstance(text, np.ndarray):
+            return text
+            
+        # Check if we have this text in our cache
+        cache_key = hash(str(text))
+        if cache_key in self.embedding_cache:
+            self.cache_hits += 1
+            if self.cache_hits % 20 == 0:  # Only log occasionally
+                print_info(f"Embedding cache: {self.cache_hits} hits, {self.cache_misses} misses")
+            return self.embedding_cache[cache_key]
+            
+        # Check text size in bytes to avoid API payload limits (36000 bytes)
+        text_bytes = len(text.encode('utf-8'))
+        max_bytes = 30000  # Set safe limit below the 36000 API limit
+        
+        # Trim texts to avoid API issues
+        original_text = text
+        if text_bytes > max_bytes:
+            print_warning(f"Text too large ({text_bytes} bytes), truncating to fit API limit...")
+            # Calculate approximate character count to fit under byte limit (with safety margin)
+            char_limit = int(len(text) * (max_bytes / text_bytes) * 0.9)
+            text = text[:char_limit]
+            
+            # Verify the truncated text is under the limit
+            truncated_bytes = len(text.encode('utf-8'))
+            if truncated_bytes > max_bytes:
+                # Further truncate if still too large
+                text = text[:int(char_limit * 0.9)]
+                
+            print_info(f"Truncated from {text_bytes} to {len(text.encode('utf-8'))} bytes")
         
         # Try with retries
+        self.cache_misses += 1
         for retry in range(max_retries):
             try:
                 # Get embedding using Gemini API
@@ -84,14 +117,20 @@ class EmbeddingStore:
                 )
                 
                 # Extract embedding from response (handle different response formats)
+                embedding_vector = None
                 if hasattr(result, 'embedding'):
-                    return np.array(result.embedding, dtype=np.float32)
+                    embedding_vector = np.array(result.embedding, dtype=np.float32)
                 elif isinstance(result, dict) and 'embedding' in result:
-                    return np.array(result['embedding'], dtype=np.float32)
+                    embedding_vector = np.array(result['embedding'], dtype=np.float32)
                 elif hasattr(result, 'values'):
-                    return np.array(result.values, dtype=np.float32)
+                    embedding_vector = np.array(result.values, dtype=np.float32)
                 elif hasattr(result, 'embeddings') and result.embeddings:
-                    return np.array(result.embeddings[0], dtype=np.float32)
+                    embedding_vector = np.array(result.embeddings[0], dtype=np.float32)
+                
+                if embedding_vector is not None:
+                    # Store in cache before returning
+                    self.embedding_cache[cache_key] = embedding_vector
+                    return embedding_vector
                 else:
                     if retry < max_retries - 1:
                         print_warning(f"No embedding returned from API (attempt {retry+1}/{max_retries}). Retrying...")
@@ -102,7 +141,37 @@ class EmbeddingStore:
                         return np.zeros(self.dimension, dtype=np.float32)
                     
             except Exception as e:
-                if retry < max_retries - 1:
+                if "payload size exceeds the limit" in str(e):
+                    # Special handling for payload size errors
+                    if retry < max_retries - 1:
+                        print_warning(f"Payload size error (attempt {retry+1}/{max_retries}). Aggressive truncation...")
+                        # More aggressive truncation for next attempt
+                        char_limit = int(len(text) * 0.7)  # Take 70% of current length
+                        text = text[:char_limit]
+                        time.sleep(0.5)
+                        continue
+                    else:
+                        # Last attempt with severe truncation
+                        print_warning("Final attempt with severe truncation...")
+                        # Severely truncate to just the beginning portion
+                        text = original_text[:min(5000, len(original_text))]
+                        try:
+                            result = genai.embed_content(
+                                model="models/embedding-001",
+                                content=text,
+                                task_type="retrieval_query"
+                            )
+                            
+                            # Extract embedding
+                            if hasattr(result, 'embedding'):
+                                embedding_vector = np.array(result.embedding, dtype=np.float32)
+                                self.embedding_cache[cache_key] = embedding_vector
+                                print_success("Successfully embedded with severe truncation")
+                                return embedding_vector
+                        except Exception as final_e:
+                            print_error(f"Final embedding attempt failed: {str(final_e)}")
+                            return np.zeros(self.dimension, dtype=np.float32)
+                elif retry < max_retries - 1:
                     print_warning(f"Embedding generation failed (attempt {retry+1}/{max_retries}): {str(e)}. Retrying...")
                     time.sleep(1 * (retry + 1))  # Exponential backoff
                     continue
@@ -131,8 +200,26 @@ class EmbeddingStore:
         # Use ThreadPoolExecutor for parallel embedding generation
         def process_text(args):
             index, text = args
-            if len(text) > 100000:
-                text = text[:100000]
+            
+            # Check text size in bytes to avoid API payload limits (36000 bytes)
+            text_bytes = len(text.encode('utf-8'))
+            max_bytes = 30000  # Set safe limit below the 36000 API limit
+            
+            # Truncate if needed
+            original_text = text
+            if text_bytes > max_bytes:
+                print_warning(f"Text at index {index} too large ({text_bytes} bytes), truncating...")
+                # Calculate approximate character count to fit under byte limit
+                char_limit = int(len(text) * (max_bytes / text_bytes) * 0.9)
+                text = text[:char_limit]
+                
+                # Verify truncated content is under the limit
+                truncated_bytes = len(text.encode('utf-8'))
+                if truncated_bytes > max_bytes:
+                    # Further truncate if still too large
+                    text = text[:int(char_limit * 0.9)]
+                
+                print_info(f"Truncated text at index {index} from {text_bytes} to {len(text.encode('utf-8'))} bytes")
             
             # Apply retry logic
             for retry in range(max_retries):
@@ -162,7 +249,36 @@ class EmbeddingStore:
                             print_warning(f"No embedding returned for text at index {index} after {max_retries} attempts.")
                             return index, np.zeros(self.dimension, dtype=np.float32)
                 except Exception as e:
-                    if retry < max_retries - 1:
+                    if "payload size exceeds the limit" in str(e):
+                        # Special handling for payload size errors
+                        if retry < max_retries - 1:
+                            print_warning(f"Payload size error for text at index {index} (attempt {retry+1}/{max_retries}). Aggressive truncation...")
+                            # More aggressive truncation for next attempt
+                            char_limit = int(len(text) * 0.7)  # Take 70% of current length
+                            text = text[:char_limit]
+                            time.sleep(0.5)
+                            continue
+                        else:
+                            # Last attempt with severe truncation
+                            print_warning(f"Final attempt with severe truncation for text at index {index}...")
+                            # Severely truncate to just the beginning portion
+                            text = original_text[:min(5000, len(original_text))]
+                            try:
+                                result = genai.embed_content(
+                                    model="models/embedding-001",
+                                    content=text,
+                                    task_type="retrieval_query"
+                                )
+                                
+                                # Extract embedding
+                                if hasattr(result, 'embedding'):
+                                    embedding_vector = np.array(result.embedding, dtype=np.float32)
+                                    print_success(f"Successfully embedded text at index {index} with severe truncation")
+                                    return index, embedding_vector
+                            except Exception as final_e:
+                                print_error(f"Final embedding attempt failed for text at index {index}: {str(final_e)}")
+                                return index, np.zeros(self.dimension, dtype=np.float32)
+                    elif retry < max_retries - 1:
                         print_warning(f"Failed to embed text at index {index} (attempt {retry+1}/{max_retries}): {str(e)}. Retrying...")
                         time.sleep(1 * (retry + 1))  # Exponential backoff
                         continue
@@ -359,13 +475,49 @@ class EmbeddingStore:
         try:
             # Check if query is already an embedding vector
             if isinstance(query, np.ndarray):
-                print_info(f"Searching using provided embedding vector")
                 query_embedding = query.reshape(1, -1).astype('float32')
             else:
-                # If query is a string, print it and get its embedding
-                print_info(f"Searching for: {limit_text_for_display(query)}")
-                query_embedding = self.get_embedding(query)
-                query_embedding = query_embedding.reshape(1, -1).astype('float32')
+                # Check if query is a string before trying to display it
+                if isinstance(query, str):
+                    # If query is a string, print it and get its embedding
+                    print_info(f"Searching for: {limit_text_for_display(query)}")
+                    query_embedding = self.get_embedding(query)
+                elif callable(query):
+                    # Handle case where query is a function/method
+                    print_warning("Query is a function/method object, not a string or embedding")
+                    return []
+                else:
+                    # Handle other types
+                    print_warning(f"Unexpected query type: {type(query)}")
+                    try:
+                        query_str = str(query)
+                        print_info(f"Converted query to string: {limit_text_for_display(query_str)}")
+                        query_embedding = self.get_embedding(query_str)
+                    except:
+                        print_error("Cannot process query with unexpected type")
+                        return []
+            
+            # Debug the embedding type and shape
+            print_info(f"Query embedding type: {type(query_embedding)}")
+            
+            # Handle different embedding formats
+            if query_embedding is None:
+                print_error("Failed to get query embedding")
+                return []
+            
+            # Convert to numpy array if it's not already
+            if not isinstance(query_embedding, np.ndarray):
+                try:
+                    # Try converting directly
+                    query_embedding = np.array(query_embedding, dtype=np.float32)
+                except Exception as convert_err:
+                    print_error(f"Error converting embedding to numpy array: {convert_err}")
+                    return []
+            
+            query_embedding = query_embedding.reshape(1, -1).astype('float32')
+            
+            # Print embedding shape for debugging
+            print_info(f"Query embedding shape: {query_embedding.shape}")
             
             # Search the index
             D, I = self.index.search(query_embedding, top_k)
@@ -382,11 +534,13 @@ class EmbeddingStore:
             
             end_time = time.time()
             processing_time = end_time - start_time
-            print_success(f"Found {len(results)} matches in {processing_time:.2f} seconds")
+            print_info(f"Found {len(results)} matches in {processing_time:.2f} seconds")
             
             return results
         except Exception as e:
             print_error(f"Search failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def test_embedding_api(self):
