@@ -61,8 +61,8 @@ A multilingual RAG (Retrieval-Augmented Generation) chatbot for answering questi
 1. Clone the repository:
 
    ```
-   git clone <repository-url>
-   cd <Project Directory>
+   git clone https://github.com/Shasvinth/Lumo-AI-Agent
+   cd Lumo-AI-Agent
    ```
 
 2. Install dependencies:
