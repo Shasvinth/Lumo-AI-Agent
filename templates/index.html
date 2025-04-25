@@ -939,7 +939,8 @@
                         sections: data.sections,
                         pages: data.pages,
                         language: data.language,
-                        webSources: data.web_sources
+                        webSources: data.web_sources,
+                        context: data.context || data.raw_context || null
                     });
                     
                     // If TTS is enabled, speak the response

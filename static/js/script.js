@@ -570,7 +570,8 @@ function selectEndpointAndSendQuery(message, selectedSources, selectedWebsites) 
                 pages: data.pages || [],
                 language: data.language,
                 format: data.format || 'plain',
-                webSources: data.web_sources
+                webSources: data.web_sources,
+                context: data.context || data.raw_context || null
             });
             updateStatus('Ready', 'success');
             
@@ -680,67 +681,177 @@ function addMessage(type, content, metadata = null) {
     
     messageDiv.appendChild(contentDiv);
     
-    // Add metadata (sources, pages, sections) in a more concise way
-    if (metadata) {
-        // Create citations container for all references
-        const citationsDiv = document.createElement('div');
-        citationsDiv.className = 'message-metadata';
+    // Add metadata (sources, pages, sections) as a dropdown if available
+    if (metadata && (metadata.sections?.length > 0 || metadata.pages?.length > 0)) {
+        // Create a collapsible dropdown for source metadata
+        const metadataContainer = document.createElement('div');
+        metadataContainer.className = 'message-metadata-container';
         
-        // Only show useful sections and pages references
-        let referencesText = '';
+        // Create the dropdown toggle button with context size indication
+        const toggleButton = document.createElement('button');
+        toggleButton.className = 'metadata-toggle';
         
-        // Add language info if available
+        // Calculate context size if available
+        let contextSizeText = '';
+        const contextText = metadata.context || metadata.raw_context || '';
+        if (contextText) {
+            const contextSize = contextText.length;
+            if (contextSize > 1024) {
+                contextSizeText = ` (${Math.round(contextSize/1024)}KB)`;
+            } else {
+                contextSizeText = ` (${contextSize} chars)`;
+            }
+        }
+        
+        toggleButton.innerHTML = `<i class="fas fa-chevron-down"></i> View Full AI Context Data${contextSizeText}`;
+        metadataContainer.appendChild(toggleButton);
+        
+        // Create the collapsible content
+        const detailsContent = document.createElement('div');
+        detailsContent.className = 'metadata-content collapsed';
+        
+        // Add context/scraped text if available - ensure it's the first item in the dropdown
+        if (metadata.context || metadata.raw_context) {
+            const contextDiv = document.createElement('div');
+            contextDiv.className = 'metadata-section context-section';
+            
+            // Create proper heading
+            const contextHeading = document.createElement('strong');
+            contextHeading.textContent = 'Full Context Data (Raw text used by AI):';
+            contextDiv.appendChild(contextHeading);
+            
+            // Debug info
+            const debugInfo = document.createElement('div');
+            debugInfo.className = 'context-debug';
+            debugInfo.textContent = `Context length: ${(metadata.context || metadata.raw_context || '').length} characters`;
+            contextDiv.appendChild(debugInfo);
+            
+            // Create pre-formatted content container for raw text
+            const contentContainer = document.createElement('pre');
+            contentContainer.className = 'context-content';
+            
+            // Get the context from either source
+            const contextText = metadata.context || metadata.raw_context || "No context data available";
+            
+            // For debugging, show the raw content directly
+            contentContainer.textContent = contextText || "CONTEXT IS EMPTY";
+            contextDiv.appendChild(contentContainer);
+            
+            // Insert context as the first item in the dropdown
+            detailsContent.insertBefore(contextDiv, detailsContent.firstChild);
+            
+            // For debugging - log context to console
+            console.log('Context data length:', (contextText || '').length);
+            console.log('Context preview:', contextText ? contextText.substring(0, 200) + '...' : 'EMPTY');
+        } else {
+            console.warn('No context data available in metadata:', metadata);
+            
+            // Add a message that context is missing
+            const contextDiv = document.createElement('div');
+            contextDiv.className = 'metadata-section context-section';
+            contextDiv.innerHTML = '<strong>Context Data Missing:</strong><div class="context-content">No context data was provided by the server. Please check server logs.</div>';
+            detailsContent.insertBefore(contextDiv, detailsContent.firstChild);
+        }
+        
+        // Add sections if available
+        if (metadata.sections && metadata.sections.length > 0) {
+            const sectionsDiv = document.createElement('div');
+            sectionsDiv.className = 'metadata-section';
+            sectionsDiv.innerHTML = `<strong>Sections:</strong> <ul>${metadata.sections.map(section => `<li>${section}</li>`).join('')}</ul>`;
+            detailsContent.appendChild(sectionsDiv);
+        }
+        
+        // Add pages if available
+        if (metadata.pages && metadata.pages.length > 0) {
+            const pagesDiv = document.createElement('div');
+            pagesDiv.className = 'metadata-section';
+            pagesDiv.innerHTML = `<strong>Pages:</strong> <ul>${metadata.pages.map(page => `<li>${page}</li>`).join('')}</ul>`;
+            detailsContent.appendChild(pagesDiv);
+        }
+        
+        // Add language info if available (simple line)
         if (metadata.language) {
-            referencesText += `Language: ${getLanguageName(metadata.language)}`;
+            const langDiv = document.createElement('div');
+            langDiv.className = 'metadata-section';
+            langDiv.innerHTML = `<strong>Language:</strong> ${getLanguageName(metadata.language)}`;
+            detailsContent.appendChild(langDiv);
         }
         
-        // Add the references div only if there's useful content
-        if (referencesText) {
-            citationsDiv.textContent = referencesText;
-            messageDiv.appendChild(citationsDiv);
+        metadataContainer.appendChild(detailsContent);
+        
+        // Add click handler to toggle the dropdown
+        toggleButton.addEventListener('click', function() {
+            detailsContent.classList.toggle('collapsed');
+            toggleButton.classList.toggle('active');
+        });
+        
+        messageDiv.appendChild(metadataContainer);
+        
+        // Simple summary for accessibility (always visible)
+        const summaryContainer = document.createElement('div');
+        summaryContainer.className = 'metadata-summary-container';
+        
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'metadata-summary';
+        
+        // Create a better summary that handles cases with only pages or only sections
+        let summaryText = 'Source: ';
+        if (metadata.sections && metadata.sections.length > 0) {
+            summaryText += `${metadata.sections.length} section${metadata.sections.length !== 1 ? 's' : ''}`;
+            if (metadata.pages && metadata.pages.length > 0) {
+                summaryText += ' from ';
+            }
         }
         
-        // Add web sources if available
-        if (metadata.webSources && metadata.webSources.length > 0) {
-            const webSourcesDiv = document.createElement('div');
-            webSourcesDiv.className = 'web-sources-container';
-            
-            // Add a heading for web sources
-            const sourcesHeading = document.createElement('div');
-            sourcesHeading.className = 'sources-heading';
-            sourcesHeading.textContent = 'Sources:';
-            webSourcesDiv.appendChild(sourcesHeading);
-            
-            // Add each web source with a link
-            metadata.webSources.forEach(source => {
-                const sourceDiv = document.createElement('div');
-                sourceDiv.className = 'web-source';
-                
-                // Add icon
-                const icon = document.createElement('i');
-                icon.className = 'fas fa-globe';
-                sourceDiv.appendChild(icon);
-                
-                // Add source name
-                const sourceName = document.createElement('span');
-                sourceName.textContent = source.name;
-                sourceDiv.appendChild(sourceName);
-                
-                // Add link if URL is available
-                if (source.url) {
-                    const link = document.createElement('a');
-                    link.href = source.url;
-                    link.target = '_blank';
-                    link.rel = 'noopener noreferrer';
-                    link.textContent = 'Visit source';
-                    sourceDiv.appendChild(link);
-                }
-                
-                webSourcesDiv.appendChild(sourceDiv);
-            });
-            
-            messageDiv.appendChild(webSourcesDiv);
+        if (metadata.pages && metadata.pages.length > 0) {
+            summaryText += `${metadata.pages.length} page${metadata.pages.length !== 1 ? 's' : ''}`;
         }
+        
+        summaryDiv.textContent = summaryText;
+        summaryContainer.appendChild(summaryDiv);
+        messageDiv.appendChild(summaryContainer);
+    }
+    
+    // Add web sources if available
+    if (metadata && metadata.webSources && metadata.webSources.length > 0) {
+        const webSourcesDiv = document.createElement('div');
+        webSourcesDiv.className = 'web-sources-container';
+        
+        // Add a heading for web sources
+        const sourcesHeading = document.createElement('div');
+        sourcesHeading.className = 'sources-heading';
+        sourcesHeading.textContent = 'Sources:';
+        webSourcesDiv.appendChild(sourcesHeading);
+        
+        // Add each web source with a link
+        metadata.webSources.forEach(source => {
+            const sourceDiv = document.createElement('div');
+            sourceDiv.className = 'web-source';
+            
+            // Add icon
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-globe';
+            sourceDiv.appendChild(icon);
+            
+            // Add source name
+            const sourceName = document.createElement('span');
+            sourceName.textContent = source.name;
+            sourceDiv.appendChild(sourceName);
+            
+            // Add link if URL is available
+            if (source.url) {
+                const link = document.createElement('a');
+                link.href = source.url;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = 'Visit source';
+                sourceDiv.appendChild(link);
+            }
+            
+            webSourcesDiv.appendChild(sourceDiv);
+        });
+        
+        messageDiv.appendChild(webSourcesDiv);
     }
     
     chatMessages.appendChild(messageDiv);

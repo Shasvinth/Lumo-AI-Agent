@@ -628,13 +628,23 @@ def process_query():
         
         # Combine answers from all sources
         combined_answer = ""
+        raw_contexts = []
         
         for i, result in enumerate(combined_results):
             if i > 0:
                 combined_answer += "\n\n"
             combined_answer += f"From {result['source']}:\n{result['answer']}"
+            
+            # Collect raw context data
+            if 'Context' in result:
+                raw_contexts.append(f"--- Context from {result['source']} ---\n{result['Context']}")
         
         print(f"Final combined answer length: {len(combined_answer)}, Sections: {len(all_sections)}, Pages: {len(all_pages)}")
+        print(f"Collected {len(raw_contexts)} context blocks with total size: {sum(len(c) for c in raw_contexts)} characters")
+        
+        # Join all raw contexts
+        full_context = "\n\n".join(raw_contexts)
+        print(f"Final context size: {len(full_context)} characters")
         
         # Store in query history for CSV export
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -655,7 +665,9 @@ def process_query():
             'answer': combined_answer,
             'sections': list(all_sections),
             'pages': list(all_pages),
-            'language': 'en'
+            'language': 'en',
+            'context': full_context,
+            'raw_context': "\n".join([result.get('Context', '') for result in combined_results if 'Context' in result])
         })
     except Exception as e:
         print(f"Error processing query: {str(e)}")
@@ -1085,6 +1097,7 @@ def process_web_query():
         combined_answer = ""
         all_sections = set()
         all_sources = []
+        raw_contexts = []
         
         for i, result in enumerate(combined_results):
             source_name = list(used_sources)[i] if i < len(used_sources) else "Unknown"
@@ -1095,6 +1108,10 @@ def process_web_query():
                 combined_answer += "\n\n"
             
             combined_answer += f"From {source_name}:\n{result['Answer']}"
+            
+            # Collect raw context data 
+            if 'Context' in result:
+                raw_contexts.append(f"--- Context from {source_name} ---\n{result['Context']}")
             
             # Collect sections
             if result['Sections']:
@@ -1115,6 +1132,10 @@ def process_web_query():
         print(f"[WEB SEARCH] Combined answer from {len(combined_results)} sources in {total_time:.2f}s")
         print(f"[WEB SEARCH] Web sources: {', '.join([s['name'] for s in all_sources])}")
         print(f"[WEB SEARCH] Combined answer length: {len(combined_answer)} chars")
+        print(f"[WEB SEARCH] Raw context blocks: {len(raw_contexts)} with total size: {sum(len(c) for c in raw_contexts)} characters")
+        
+        # Join all raw contexts
+        full_context = "\n\n".join(raw_contexts)
         
         # Store in query history
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1138,8 +1159,10 @@ def process_web_query():
             'sections': list(all_sections),
             'pages': page_refs,
             'language': 'en',
-            'web_sources': all_sources,
-            'processing_time': f"{total_time:.2f}s"
+            'web_sources': all_sources, 
+            'processing_time': f"{total_time:.2f}s",
+            'context': full_context,
+            'raw_context': "\n".join([result.get('Context', '') for result in combined_results if 'Context' in result])
         })
     except Exception as e:
         print(f"[WEB SEARCH] Error processing web query: {str(e)}")
@@ -1153,23 +1176,15 @@ def process_combined_query():
     global QUERY_HISTORY
     
     data = request.json
-    query = data.get('query', '')
+    query = data.get('query')
     selected_sources = data.get('sources', [])
     selected_websites = data.get('websites', [])
-    use_markdown = data.get('useMarkdown', False)
+    language = data.get('language', 'en')
+    use_markdown = data.get('use_markdown', False)
     
-    print(f"\n[COMBINED SEARCH] Query: '{limit_text_for_display(query)}'")
-    print(f"[COMBINED SEARCH] Selected textbooks: {selected_sources}")
+    print(f"[COMBINED SEARCH] Query: '{query}'")
+    print(f"[COMBINED SEARCH] Selected sources: {selected_sources}")
     print(f"[COMBINED SEARCH] Selected websites: {selected_websites}")
-    print(f"[COMBINED SEARCH] Use markdown: {use_markdown}")
-    
-    if not query:
-        return jsonify({'success': False, 'error': 'No query provided'})
-    
-    # Check if we have any sources available
-    if not selected_sources and not selected_websites:
-        print("[COMBINED SEARCH] No sources selected (neither textbooks nor websites)")
-        return jsonify({'success': False, 'error': 'No sources selected'})
     
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1225,50 +1240,58 @@ def process_combined_query():
                     return result.get_json()
                 return result
         
-        # Process searches sequentially to avoid OpenMP threading issues
-        if textbook_data:
-            print("[COMBINED SEARCH] Running textbook search")
-            try:
-                results['textbook'] = process_textbook_query()
-                print("[COMBINED SEARCH] Textbook search completed")
-                # Force garbage collection after task
-                gc.collect()
-            except Exception as e:
-                print(f"[COMBINED SEARCH] Error processing textbook search: {str(e)}")
-                results['textbook'] = {'success': False, 'error': str(e)}
+        # Process textbook and web queries in parallel
+        textbook_result = None
+        web_result = None
+        textbook_success = False
+        web_success = False
         
-        if web_data:
-            print("[COMBINED SEARCH] Running web search")
-            try:
-                results['web'] = process_web_search()
-                print("[COMBINED SEARCH] Web search completed")
-                # Force garbage collection after task
-                gc.collect()
-            except Exception as e:
-                print(f"[COMBINED SEARCH] Error processing web search: {str(e)}")
-                results['web'] = {'success': False, 'error': str(e)}
-        
-        end_time = time.time()
-        print(f"[COMBINED SEARCH] Sequential processing completed in {end_time - start_time:.2f} seconds")
-        
-        # Check if we have any successful results
-        textbook_result = results.get('textbook', {})
-        web_result = results.get('web', {})
-        
-        textbook_success = textbook_result.get('success', False) if textbook_result else False
-        web_success = web_result.get('success', False) if web_result else False
-        
-        if not textbook_success and not web_success:
-            print("[COMBINED SEARCH] No successful results from any source")
-            return jsonify({
-                'success': False, 
-                'error': 'No results found from any of the selected sources'
-            })
-        
-        # Combine all successful results
         combined_answer = ""
         all_sections = []
         all_pages = []
+        all_web_sources = []
+        
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_to_source = {}
+            
+            # Start textbook query if sources are selected
+            if selected_sources and SOURCES:
+                future_to_source[executor.submit(process_textbook_query)] = 'textbook'
+                print("[COMBINED SEARCH] Submitted textbook query")
+            
+            # Start web query if websites are selected
+            if selected_websites and APPROVED_WEBSITES:
+                future_to_source[executor.submit(process_web_search)] = 'web'
+                print("[COMBINED SEARCH] Submitted web query")
+            
+            # Process results as they complete
+            for future in as_completed(future_to_source):
+                source_type = future_to_source[future]
+                try:
+                    result = future.result()
+                    if result:
+                        if source_type == 'textbook':
+                            textbook_result = result
+                            textbook_success = result.get('success', False)
+                            print(f"[COMBINED SEARCH] Textbook query completed: success={textbook_success}")
+                        elif source_type == 'web':
+                            web_result = result
+                            web_success = result.get('success', False)
+                            print(f"[COMBINED SEARCH] Web query completed: success={web_success}")
+                except Exception as e:
+                    print(f"[COMBINED SEARCH] Error processing {source_type} query: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+        
+        if not textbook_success and not web_success:
+            return jsonify({
+                'success': True,
+                'answer': "No results found from either textbooks or web sources. Please try a different query or select different sources.",
+                'sections': [],
+                'pages': [],
+                'language': 'en'
+            })
+        
         all_web_sources = []
         
         # Add textbook results
@@ -1332,13 +1355,61 @@ def process_combined_query():
         }
         QUERY_HISTORY.append(history_entry)
         
+        # Format context data for combined results
+        textbook_context = ""
+        web_context = ""
+        
+        # Get textbook context if available
+        if textbook_success:
+            if 'context' in textbook_result:
+                textbook_context = textbook_result['context']
+            elif 'raw_context' in textbook_result:
+                textbook_context = textbook_result['raw_context']
+            
+            if textbook_context:
+                print(f"[COMBINED SEARCH] Textbook context length: {len(textbook_context)}")
+            else:
+                print("[COMBINED SEARCH] No textbook context available")
+        
+        # Get web context if available
+        if web_success:
+            if 'context' in web_result:
+                web_context = web_result['context']
+            elif 'raw_context' in web_result:
+                web_context = web_result['raw_context']
+            
+            if web_context:
+                print(f"[COMBINED SEARCH] Web context length: {len(web_context)}")
+            else:
+                print("[COMBINED SEARCH] No web context available")
+        
+        # Combine contexts with proper formatting
+        full_context = ""
+        if textbook_context:
+            full_context += "=== TEXTBOOK CONTEXT ===\n\n" + textbook_context + "\n\n"
+        if web_context:
+            full_context += "=== WEB CONTEXT ===\n\n" + web_context
+        
+        # Create combined raw context
+        combined_raw_context = ""
+        if textbook_context:
+            combined_raw_context += textbook_context
+        if web_context:
+            if combined_raw_context:
+                combined_raw_context += "\n\n"
+            combined_raw_context += web_context
+        
+        print(f"[COMBINED SEARCH] Total combined context length: {len(full_context)}")
+        
         return jsonify({
             'success': True,
             'answer': combined_answer,
             'sections': all_sections,
             'pages': all_pages,
             'language': 'en',
-            'web_sources': all_web_sources
+            'web_sources': all_web_sources,
+            'context': full_context,
+            'raw_context': combined_raw_context
         })
     except Exception as e:
         print(f"[COMBINED SEARCH] Error processing combined query: {str(e)}")

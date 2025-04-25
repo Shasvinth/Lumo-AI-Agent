@@ -384,7 +384,13 @@ class RAGProcessor:
             answer = response.text
             
             # Format the context for return (debugging purposes)
-            context_str = "\n\n".join([f"Context {i+1}:\n{c['chunk']['text']}" for i, c in enumerate(contexts)])
+            context_str = ""
+            for i, c in enumerate(contexts):
+                chunk_text = c['chunk']['text']
+                # Include section and page information if available
+                section_info = f"Section: {c['chunk'].get('section', 'Unknown')}"
+                page_info = f"Pages: {', '.join(map(str, c['chunk'].get('pages', ['Unknown'])))}"
+                context_str += f"Context {i+1}:\n{section_info}\n{page_info}\n\n{chunk_text}\n\n{'='*50}\n\n"
             
             # Return the result with all metadata
             result = {
