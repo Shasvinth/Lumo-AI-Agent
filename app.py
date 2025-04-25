@@ -210,28 +210,43 @@ def verify_data_integrity():
     print("Data integrity verification completed.")
 
 def initialize_processors():
-    """Initialize processors for all sources"""
-    global SOURCE_PROCESSORS, WEB_SOURCE_PROCESSORS
+    """Initialize processors for all sources and websites"""
+    global SOURCES, SOURCE_PROCESSORS, APPROVED_WEBSITES, WEB_SOURCE_PROCESSORS
     
-    # Initialize processors for book sources
-    for source_name, source_data in SOURCES.items():
-        if source_name not in SOURCE_PROCESSORS:
-            try:
-                processor = RAGProcessor(source_data['index_path'], source_data['chunks_path'])
-                SOURCE_PROCESSORS[source_name] = processor
-                print(f"Initialized processor for source: {source_name}")
-            except Exception as e:
-                print(f"Error initializing processor for {source_name}: {str(e)}")
+    print("Initializing processors...")
     
-    # Initialize processors for web sources
-    for website_name, website_data in APPROVED_WEBSITES.items():
-        if website_name not in WEB_SOURCE_PROCESSORS:
+    # Initialize source processors
+    if SELECTED_SOURCES:
+        print(f"Initializing {len(SELECTED_SOURCES)} selected source processors...")
+        count = 0
+        for source in SELECTED_SOURCES:
+            if source in SOURCES:
+                try:
+                    source_data = SOURCES[source]
+                    processor = RAGProcessor(source_data['index_path'], source_data['chunks_path'])
+                    SOURCE_PROCESSORS[source] = processor
+                    count += 1
+                    print(f"Initialized processor for source: {source} ({count}/{len(SELECTED_SOURCES)})")
+                except Exception as e:
+                    print(f"Failed to initialize processor for source {source}: {str(e)}")
+        print(f"Initialized {count} source processors")
+    
+    # Initialize website processors
+    if APPROVED_WEBSITES:
+        print(f"Initializing {len(APPROVED_WEBSITES)} website processors...")
+        count = 0
+        total = len(APPROVED_WEBSITES)
+        for name, website in APPROVED_WEBSITES.items():
             try:
-                processor = RAGProcessor(website_data['index_path'], website_data['chunks_path'])
-                WEB_SOURCE_PROCESSORS[website_name] = processor
-                print(f"Initialized processor for website: {website_name}")
+                processor = RAGProcessor(website['index_path'], website['chunks_path'])
+                WEB_SOURCE_PROCESSORS[name] = processor
+                count += 1
+                print(f"Initialized processor for website: {name} ({count}/{total})")
             except Exception as e:
-                print(f"Error initializing processor for website {website_name}: {str(e)}")
+                print(f"Failed to initialize processor for website {name}: {str(e)}")
+        print(f"Initialized {count} website processors")
+        
+    print("Processor initialization complete.")
 
 def initialize_approved_websites():
     """Initialize the system with pre-approved websites for search"""
@@ -966,7 +981,7 @@ def process_web_query():
             print("[WEB SEARCH] No valid website processors available")
             return jsonify({'success': False, 'error': 'No valid websites selected'})
         
-        print(f"[WEB SEARCH] Using {len(processors)} website processors")
+        print(f"[WEB SEARCH] Starting parallel search with {len(processors)} website processors")
         
         # Process query using all selected web sources in parallel
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -981,7 +996,8 @@ def process_web_query():
             website_name = website_names[idx]
             query_id = str(uuid.uuid4())
             
-            print(f"[WEB SEARCH] Processing query with website: {website_name}")
+            site_start_time = time.time()
+            print(f"[WEB SEARCH] Processing {website_name}...")
             
             # Process query
             result = processor.process_query(
@@ -990,9 +1006,14 @@ def process_web_query():
                 top_k=3  # Fewer results per source for web queries
             )
             
+            site_end_time = time.time()
+            processing_time = site_end_time - site_start_time
+            print(f"[WEB SEARCH] {website_name} completed in {processing_time:.2f}s")
+            
             return {
                 'result': result,
-                'website_name': website_name
+                'website_name': website_name,
+                'processing_time': processing_time
             }
         
         # Use ThreadPoolExecutor to process websites in parallel
@@ -1006,19 +1027,21 @@ def process_web_query():
                     data = future.result()
                     result = data['result']
                     website_name = data['website_name']
+                    processing_time = data['processing_time']
                     
                     # Only add results if we got an answer
                     if result['Answer'].strip():
                         combined_results.append(result)
                         used_sources.add(website_name)
-                        print(f"[WEB SEARCH] Got valid answer from {website_name}")
+                        print(f"[WEB SEARCH] Got valid answer from {website_name} ({processing_time:.2f}s)")
                     else:
-                        print(f"[WEB SEARCH] No valid answer from {website_name}")
+                        print(f"[WEB SEARCH] No valid answer from {website_name} ({processing_time:.2f}s)")
                 except Exception as e:
                     print(f"[WEB SEARCH] Error processing website: {str(e)}")
         
         end_time = time.time()
-        print(f"[WEB SEARCH] Parallel processing completed in {end_time - start_time:.2f} seconds")
+        total_time = end_time - start_time
+        print(f"[WEB SEARCH] Parallel processing completed in {total_time:.2f} seconds")
         
         if not combined_results:
             print("[WEB SEARCH] No results found from any web source")
@@ -1028,7 +1051,8 @@ def process_web_query():
                 'sections': [],
                 'pages': [],
                 'language': 'en',
-                'web_sources': []
+                'web_sources': [],
+                'processing_time': f"{total_time:.2f}s"
             })
         
         # Combine results (simple approach - concatenate with source attribution)
@@ -1062,7 +1086,7 @@ def process_web_query():
         # Format page references for web sources (they're actually source names)
         page_refs = [f"Source: {s['name']}" for s in all_sources]
         
-        print(f"[WEB SEARCH] Combined answer from {len(combined_results)} sources")
+        print(f"[WEB SEARCH] Combined answer from {len(combined_results)} sources in {total_time:.2f}s")
         print(f"[WEB SEARCH] Web sources: {', '.join([s['name'] for s in all_sources])}")
         
         # Store in query history
@@ -1076,7 +1100,8 @@ def process_web_query():
             'sections': ", ".join(all_sections),
             'pages': ", ".join(page_refs),
             'language': 'en',
-            'type': 'web_query'
+            'type': 'web_query',
+            'processing_time': f"{total_time:.2f}s"
         }
         QUERY_HISTORY.append(history_entry)
         
@@ -1086,7 +1111,8 @@ def process_web_query():
             'sections': list(all_sections),
             'pages': page_refs,
             'language': 'en',
-            'web_sources': all_sources
+            'web_sources': all_sources,
+            'processing_time': f"{total_time:.2f}s"
         })
     except Exception as e:
         print(f"[WEB SEARCH] Error processing web query: {str(e)}")
@@ -1404,4 +1430,15 @@ def websites_page():
     return render_template('websites.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Print clear message about where the app is running
+    ip = '0.0.0.0'  # This makes it accessible from other machines
+    port = 5000
+    print("\n" + "="*60)
+    print(f"LUMO AI Agent is running on:")
+    print(f"Local URL:   http://127.0.0.1:{port}")
+    print(f"Network URL: http://<your-ip-address>:{port}")
+    print(f"Press CTRL+C to quit")
+    print("="*60 + "\n")
+    
+    # Run the app on all network interfaces
+    app.run(debug=True, host=ip, port=port)
