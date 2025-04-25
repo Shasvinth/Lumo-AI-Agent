@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lumo - Multilingual Textbook Q&A</title>
+    <title>Lumo - Multilingual Textbook Q&amp;A</title>
     <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
     <link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/static/css/styles.css">
@@ -73,6 +73,122 @@
             margin-left: 5px;
             min-width: 20px;
             font-weight: 600;
+        }
+
+        .website-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .input-field {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+        
+        .action-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .action-button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .approved-websites-list {
+            margin-top: 15px;
+        }
+        
+        .website-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            background-color: var(--card-bg);
+        }
+        
+        .website-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+        
+        .website-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .website-url {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+        
+        .website-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .website-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-color);
+            padding: 5px;
+            border-radius: 4px;
+        }
+        
+        .website-button:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .website-button.delete {
+            color: #dc3545;
+        }
+        
+        .option-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px 0;
+        }
+        
+        /* Web source attribution */
+        .web-source {
+            display: flex;
+            align-items: center;
+            margin-top: 4px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .web-source i {
+            margin-right: 5px;
+        }
+        
+        .web-source a {
+            color: var(--primary-color);
+            text-decoration: underline;
+            margin-left: 5px;
         }
     </style>
 </head>
@@ -209,6 +325,47 @@
                         <button id="clear-history" class="export-button clear">
                             <i class="fas fa-trash"></i> Clear History
                         </button>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-globe"></i> Approved Websites</h3>
+                    <div id="websites-container">
+                        <p>Add approved websites for web search. Only content from these sites will be used.</p>
+                        <div class="website-form">
+                            <input type="url" id="website-url" placeholder="Enter website URL" class="input-field">
+                            <input type="text" id="website-name" placeholder="Name (optional)" class="input-field">
+                            <button id="add-website-button" class="action-button">
+                                <i class="fas fa-plus"></i> Add Website
+                            </button>
+                        </div>
+                        <div class="approved-websites-list" id="approved-websites-list">
+                            <p>No approved websites added yet</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <h3><i class="fas fa-search"></i> Search Options</h3>
+                    <div id="search-options">
+                        <div class="option-row">
+                            <label for="textbook-toggle">Search Textbooks</label>
+                            <div class="toggle-container">
+                                <input type="checkbox" id="textbook-toggle" checked>
+                                <div class="toggle-switch">
+                                    <div class="toggle-knob"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="option-row">
+                            <label for="web-toggle">Search Web Content</label>
+                            <div class="toggle-container">
+                                <input type="checkbox" id="web-toggle">
+                                <div class="toggle-switch">
+                                    <div class="toggle-knob"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -393,6 +550,330 @@
             document.getElementById('about-panel').classList.remove('active');
             this.style.display = 'none';
         });
+
+        // Web search functionality
+        let approvedWebsites = {};
+        let useTextbooks = true;
+        let useWebSearch = false;
+        
+        // Fetch existing approved websites when page loads
+        fetch('/websites')
+            .then(response => response.json())
+            .then(data => {
+                approvedWebsites = data;
+                updateWebsitesList();
+            })
+            .catch(error => {
+                console.error('Error loading approved websites:', error);
+            });
+        
+        // Add website functionality
+        document.getElementById('add-website-button').addEventListener('click', function() {
+            const urlInput = document.getElementById('website-url');
+            const nameInput = document.getElementById('website-name');
+            
+            const url = urlInput.value.trim();
+            const name = nameInput.value.trim();
+            
+            if (!url) {
+                alert('Please enter a valid URL');
+                return;
+            }
+            
+            // Update status
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            statusText.textContent = 'Processing website...';
+            statusDot.style.backgroundColor = '#ffc107'; // Yellow for processing
+            
+            // Send request to add website
+            fetch('/add-website', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: url,
+                    name: name
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    approvedWebsites = data.websites;
+                    updateWebsitesList();
+                    
+                    // Clear form
+                    urlInput.value = '';
+                    nameInput.value = '';
+                    
+                    // Update status
+                    statusText.textContent = 'Website added';
+                    statusDot.style.backgroundColor = '#28a745'; // Green for success
+                    setTimeout(() => {
+                        statusText.textContent = 'Ready';
+                        statusDot.style.backgroundColor = '#28a745';
+                    }, 3000);
+                    
+                    // Check if web search is enabled
+                    if (!useWebSearch) {
+                        document.getElementById('web-toggle').checked = true;
+                        useWebSearch = true;
+                    }
+                    
+                    // Enable send button if it was disabled
+                    document.getElementById('send-button').disabled = false;
+                    document.getElementById('user-input').disabled = false;
+                    
+                } else {
+                    alert('Error adding website: ' + data.error);
+                    statusText.textContent = 'Error';
+                    statusDot.style.backgroundColor = '#dc3545'; // Red for error
+                    setTimeout(() => {
+                        statusText.textContent = 'Ready';
+                        statusDot.style.backgroundColor = '#28a745';
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to add website. Please try again.');
+                
+                statusText.textContent = 'Error';
+                statusDot.style.backgroundColor = '#dc3545'; // Red for error
+                setTimeout(() => {
+                    statusText.textContent = 'Ready';
+                    statusDot.style.backgroundColor = '#28a745';
+                }, 3000);
+            });
+        });
+        
+        // Function to update the websites list in the UI
+        function updateWebsitesList() {
+            const websitesList = document.getElementById('approved-websites-list');
+            
+            if (Object.keys(approvedWebsites).length === 0) {
+                websitesList.innerHTML = '<p>No approved websites added yet</p>';
+                return;
+            }
+            
+            let html = '';
+            for (const [key, website] of Object.entries(approvedWebsites)) {
+                html += `
+                <div class="website-item" data-name="${key}">
+                    <div class="website-info">
+                        <div class="website-name">${website.name}</div>
+                        <div class="website-url">${website.url}</div>
+                    </div>
+                    <div class="website-controls">
+                        <button class="website-button delete" title="Remove website" onclick="removeWebsite('${key}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                `;
+            }
+            
+            websitesList.innerHTML = html;
+        }
+        
+        // Function to remove a website
+        window.removeWebsite = function(name) {
+            if (confirm(`Are you sure you want to remove the website "${name}"?`)) {
+                fetch(`/websites/${name}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        approvedWebsites = data.websites;
+                        updateWebsitesList();
+                        
+                        // Check if we need to disable web search
+                        if (Object.keys(approvedWebsites).length === 0 && useWebSearch) {
+                            useWebSearch = false;
+                            document.getElementById('web-toggle').checked = false;
+                            
+                            // If no textbooks and no websites, disable send button
+                            const currentFileText = document.getElementById('current-file-text').textContent;
+                            if (currentFileText === 'No file uploaded' && !useTextbooks) {
+                                document.getElementById('send-button').disabled = true;
+                                document.getElementById('user-input').disabled = true;
+                            }
+                        }
+                    } else {
+                        alert('Error removing website: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to remove website. Please try again.');
+                });
+            }
+        };
+        
+        // Toggle search options
+        document.getElementById('textbook-toggle').addEventListener('change', function() {
+            useTextbooks = this.checked;
+            
+            // Check if we need to disable the send button
+            if (!useTextbooks && !useWebSearch) {
+                document.getElementById('send-button').disabled = true;
+                document.getElementById('user-input').disabled = true;
+            } else if ((!useTextbooks && useWebSearch && Object.keys(approvedWebsites).length > 0) || 
+                        (useTextbooks && document.getElementById('current-file-text').textContent !== 'No file uploaded')) {
+                document.getElementById('send-button').disabled = false;
+                document.getElementById('user-input').disabled = false;
+            }
+        });
+        
+        document.getElementById('web-toggle').addEventListener('change', function() {
+            useWebSearch = this.checked;
+            
+            // Check if we need to disable the send button
+            if (!useWebSearch && !useTextbooks) {
+                document.getElementById('send-button').disabled = true;
+                document.getElementById('user-input').disabled = true;
+            } else if ((useWebSearch && Object.keys(approvedWebsites).length > 0) || 
+                       (useTextbooks && document.getElementById('current-file-text').textContent !== 'No file uploaded')) {
+                document.getElementById('send-button').disabled = false;
+                document.getElementById('user-input').disabled = false;
+            }
+            
+            // If enabling web search but no approved websites, show a message
+            if (useWebSearch && Object.keys(approvedWebsites).length === 0) {
+                alert('You need to add at least one approved website to use web search. Please add a website in the Approved Websites section.');
+                this.checked = false;
+                useWebSearch = false;
+            }
+        });
+        
+        // Override the existing message sending function to handle web search
+        const originalSendMessage = window.sendMessage;
+        window.sendMessage = function() {
+            const userInput = document.getElementById('user-input');
+            const query = userInput.value.trim();
+            
+            if (!query) return;
+            
+            // Add user message to chat
+            addMessage('user', query);
+            
+            // Clear input field
+            userInput.value = '';
+            
+            // Show typing indicator
+            addTypingIndicator();
+            
+            // Update status
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            statusText.textContent = 'Processing...';
+            statusDot.style.backgroundColor = '#ffc107'; // Yellow for processing
+            
+            // Get selected sources (textbooks)
+            let selectedSources = [];
+            if (useTextbooks) {
+                const sourceElements = document.querySelectorAll('.source-item.selected');
+                sourceElements.forEach(element => {
+                    selectedSources.push(element.dataset.name);
+                });
+            }
+            
+            // Get selected websites
+            let selectedWebsites = [];
+            if (useWebSearch) {
+                selectedWebsites = Object.keys(approvedWebsites);
+            }
+            
+            // Determine which API endpoint to use based on search options
+            let endpoint, requestData;
+            
+            if (useTextbooks && useWebSearch) {
+                // Combined search
+                endpoint = '/combined-query';
+                requestData = {
+                    query: query,
+                    sources: selectedSources,
+                    websites: selectedWebsites,
+                    language: document.getElementById('language-selector').value
+                };
+            } else if (useWebSearch) {
+                // Web search only
+                endpoint = '/web-query';
+                requestData = {
+                    query: query,
+                    websites: selectedWebsites,
+                    language: document.getElementById('language-selector').value
+                };
+            } else {
+                // Textbook search only (original behavior)
+                endpoint = '/query';
+                requestData = {
+                    query: query,
+                    sources: selectedSources,
+                    language: document.getElementById('language-selector').value
+                };
+            }
+            
+            // Send request to appropriate endpoint
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                if (data.success) {
+                    // Prepare metadata for citation display
+                    const metadata = {
+                        sections: data.sections || [],
+                        pages: data.pages || [],
+                        web_sources: data.web_sources || []
+                    };
+                    
+                    // Add AI response to chat
+                    addMessage('assistant', data.answer, metadata);
+                    
+                    // Update status
+                    statusText.textContent = 'Ready';
+                    statusDot.style.backgroundColor = '#28a745';
+                } else {
+                    // Add error message
+                    addMessage('error', 'Error: ' + data.error);
+                    
+                    // Update status
+                    statusText.textContent = 'Error';
+                    statusDot.style.backgroundColor = '#dc3545';
+                    setTimeout(() => {
+                        statusText.textContent = 'Ready';
+                        statusDot.style.backgroundColor = '#28a745';
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                // Add error message
+                addMessage('error', 'Network error. Please try again.');
+                
+                // Update status
+                statusText.textContent = 'Error';
+                statusDot.style.backgroundColor = '#dc3545';
+                setTimeout(() => {
+                    statusText.textContent = 'Ready';
+                    statusDot.style.backgroundColor = '#28a745';
+                }, 3000);
+            });
+        };
     </script>
 </body>
 </html>

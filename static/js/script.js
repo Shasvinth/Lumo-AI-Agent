@@ -503,18 +503,21 @@ function addMessage(type, content, metadata = null) {
     
     messageDiv.appendChild(contentDiv);
     
+    // Add metadata (sources, pages, sections)
     if (metadata) {
-        const metadataDiv = document.createElement('div');
-        metadataDiv.className = 'message-metadata';
+        // Create citations container for all references
+        const citationsDiv = document.createElement('div');
+        citationsDiv.className = 'message-metadata';
         
+        // Add sections and pages references if available
         let metadataText = '';
-        if (metadata.sections) {
-            metadataText += `Sections: ${metadata.sections}`;
+        if (metadata.sections && metadata.sections.length > 0) {
+            metadataText += `Sections: ${Array.isArray(metadata.sections) ? metadata.sections.join(", ") : metadata.sections}`;
         }
         
-        if (metadata.pages) {
+        if (metadata.pages && metadata.pages.length > 0) {
             if (metadataText) metadataText += ' | ';
-            metadataText += `Pages: ${metadata.pages}`;
+            metadataText += `Pages: ${Array.isArray(metadata.pages) ? metadata.pages.join(", ") : metadata.pages}`;
         }
         
         if (metadata.language) {
@@ -522,8 +525,53 @@ function addMessage(type, content, metadata = null) {
             metadataText += `Language: ${getLanguageName(metadata.language)}`;
         }
         
-        metadataDiv.textContent = metadataText;
-        messageDiv.appendChild(metadataDiv);
+        // Only add the standard metadata div if there's content
+        if (metadataText) {
+            citationsDiv.textContent = metadataText;
+            messageDiv.appendChild(citationsDiv);
+        }
+        
+        // Add web sources if available
+        if (metadata.web_sources && metadata.web_sources.length > 0) {
+            const webSourcesDiv = document.createElement('div');
+            webSourcesDiv.className = 'web-sources-container';
+            
+            // Add a heading for web sources
+            const sourcesHeading = document.createElement('div');
+            sourcesHeading.className = 'sources-heading';
+            sourcesHeading.textContent = 'Web Sources:';
+            webSourcesDiv.appendChild(sourcesHeading);
+            
+            // Add each web source with a link
+            metadata.web_sources.forEach(source => {
+                const sourceDiv = document.createElement('div');
+                sourceDiv.className = 'web-source';
+                
+                // Add icon
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-globe';
+                sourceDiv.appendChild(icon);
+                
+                // Add source name
+                const sourceName = document.createElement('span');
+                sourceName.textContent = source.name;
+                sourceDiv.appendChild(sourceName);
+                
+                // Add link if URL is available
+                if (source.url) {
+                    const link = document.createElement('a');
+                    link.href = source.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = 'Visit source';
+                    sourceDiv.appendChild(link);
+                }
+                
+                webSourcesDiv.appendChild(sourceDiv);
+            });
+            
+            messageDiv.appendChild(webSourcesDiv);
+        }
     }
     
     chatMessages.appendChild(messageDiv);
