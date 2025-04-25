@@ -438,7 +438,7 @@
                         <div class="option-row">
                             <label for="web-toggle">Search Web Content</label>
                             <div class="toggle-container">
-                                <input type="checkbox" id="web-toggle">
+                                <input type="checkbox" id="web-toggle" checked>
                                 <div class="toggle-switch">
                                     <div class="toggle-knob"></div>
                                 </div>
@@ -880,8 +880,8 @@
             // Determine which API endpoint to use based on search options
             let endpoint, requestData;
             
-            if (useTextbooks && useWebSearch) {
-                // Combined search
+            if (useTextbooks && useWebSearch && selectedSources.length > 0 && selectedWebsites.length > 0) {
+                // Combined search if both are enabled and have sources
                 endpoint = '/combined-query';
                 requestData = {
                     query: query,
@@ -889,7 +889,7 @@
                     websites: selectedWebsites,
                     language: document.getElementById('language-selector').value
                 };
-            } else if (useWebSearch) {
+            } else if (useWebSearch && selectedWebsites.length > 0) {
                 // Web search only
                 endpoint = '/web-query';
                 requestData = {
@@ -897,7 +897,7 @@
                     websites: selectedWebsites,
                     language: document.getElementById('language-selector').value
                 };
-            } else {
+            } else if (useTextbooks && selectedSources.length > 0) {
                 // Textbook search only (original behavior)
                 endpoint = '/query';
                 requestData = {
@@ -905,6 +905,16 @@
                     sources: selectedSources,
                     language: document.getElementById('language-selector').value
                 };
+            } else {
+                // No sources available
+                removeTypingIndicator();
+                addMessage('error', 'No search sources available. Please enable at least one textbook or website source.');
+                
+                // Update status
+                statusText.textContent = 'Error';
+                statusDot.style.backgroundColor = '#dc3545'; // Red for error
+                
+                return;
             }
             
             console.log(`Sending query to ${endpoint} with search options: textbooks=${useTextbooks}, web=${useWebSearch}`);
@@ -1072,6 +1082,35 @@
                         '<p class="no-sources">Error loading sources. Please refresh the page.</p>';
                 });
         }
+
+        // Initialization - set web search to be enabled by default when loading the page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load web search preference from localStorage
+            const storedWebSearchPref = localStorage.getItem('useWebSearch');
+            // Default to true if not set
+            useWebSearch = storedWebSearchPref !== null ? storedWebSearchPref === 'true' : true;
+            
+            // Set the toggle checkbox
+            const webToggle = document.getElementById('web-toggle');
+            if (webToggle) {
+                webToggle.checked = useWebSearch;
+            }
+            
+            // Update the indicator
+            updateWebSearchIndicator();
+            
+            // Load approved websites data
+            fetch('/websites')
+                .then(response => response.json())
+                .then(data => {
+                    approvedWebsites = data;
+                    updateWebsitesList();
+                    updateWebSearchIndicator();
+                })
+                .catch(error => {
+                    console.error('Error loading approved websites:', error);
+                });
+        });
     </script>
 </body>
 </html>

@@ -344,7 +344,7 @@ class EmbeddingStore:
         Search for similar chunks to a query
         
         Args:
-            query (str): Search query
+            query (str or numpy.ndarray): Search query text or embedding vector
             top_k (int): Number of top matches to return
             
         Returns:
@@ -355,12 +355,17 @@ class EmbeddingStore:
             return []
         
         start_time = time.time()
-        print_info(f"Searching for: {limit_text_for_display(query)}")
         
         try:
-            # Get query embedding
-            query_embedding = self.get_embedding(query)
-            query_embedding = query_embedding.reshape(1, -1).astype('float32')
+            # Check if query is already an embedding vector
+            if isinstance(query, np.ndarray):
+                print_info(f"Searching using provided embedding vector")
+                query_embedding = query.reshape(1, -1).astype('float32')
+            else:
+                # If query is a string, print it and get its embedding
+                print_info(f"Searching for: {limit_text_for_display(query)}")
+                query_embedding = self.get_embedding(query)
+                query_embedding = query_embedding.reshape(1, -1).astype('float32')
             
             # Search the index
             D, I = self.index.search(query_embedding, top_k)

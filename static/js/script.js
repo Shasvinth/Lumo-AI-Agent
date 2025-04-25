@@ -56,9 +56,18 @@ let recognition = null;
 let speechSynthesis = window.speechSynthesis;
 let ttsEnabled = false; // Changed to false by default
 let darkModeEnabled = false;
-let useWebSearch = false;
+let useWebSearch = true; // Default to using web search
 let useTextbooks = true; // Default to using textbooks
 let approvedWebsites = {};
+
+// Set default values in localStorage for persistence
+if (localStorage.getItem('useWebSearch') === null) {
+    localStorage.setItem('useWebSearch', 'true');
+}
+
+if (localStorage.getItem('useTextbooks') === null) {
+    localStorage.setItem('useTextbooks', 'true');
+}
 
 // Initialize speech recognition if browser supports it
 function initSpeechRecognition() {
@@ -499,7 +508,7 @@ function selectEndpointAndSendQuery(message, selectedSources, selectedWebsites) 
         return Promise.reject(new Error("No sources available"));
     }
     
-    // Always use combined query when possible, regardless of toggle state
+    // Always use combined query when both sources are available and enabled
     if (hasTextbooks && hasWebsites) {
         console.log("Using combined search - both sources available");
         endpoint = '/combined-query';
@@ -825,7 +834,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize the toggle switch to off state
     updateToggleSwitch();
     
-    // Initialize web search preference from localStorage or default to false
+    // Initialize web search preference from localStorage or default to true
     useWebSearch = localStorage.getItem('useWebSearch') === 'true';
     if (webToggle) {
         webToggle.checked = useWebSearch;

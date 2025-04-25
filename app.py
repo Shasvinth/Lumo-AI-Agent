@@ -27,6 +27,7 @@ from deep_translator import GoogleTranslator
 from components.processors.rag_processor import RAGProcessor
 from components.processors.pdf_processor import process_pdf
 from components.processors.embedding_store import EmbeddingStore, build_vector_store
+from components.utils.utils import limit_text_for_display
 
 # Load environment variables
 load_dotenv()
@@ -940,8 +941,10 @@ def process_web_query():
     query = data.get('query')
     selected_websites = data.get('websites', [])
     
+    # Add more detailed debugging
     print(f"\n[WEB SEARCH] Query: '{query}'")
     print(f"[WEB SEARCH] Selected websites: {selected_websites}")
+    print(f"[WEB SEARCH] Total approved websites: {len(APPROVED_WEBSITES)}")
     
     if not query:
         return jsonify({'success': False, 'error': 'No query provided'})
@@ -956,6 +959,27 @@ def process_web_query():
         print(f"[WEB SEARCH] No specific websites selected, using all: {selected_websites}")
     
     try:
+        # Print detailed info about website data
+        for website_name in selected_websites:
+            if website_name in APPROVED_WEBSITES:
+                website_data = APPROVED_WEBSITES[website_name]
+                print(f"[WEB SEARCH] Website {website_name}:")
+                print(f"  - URL: {website_data.get('url', 'N/A')}")
+                print(f"  - Chunks path: {website_data.get('chunks_path', 'N/A')}")
+                print(f"  - Index path: {website_data.get('index_path', 'N/A')}")
+                print(f"  - Chunk count: {website_data.get('chunk_count', 0)}")
+                
+                # Check if files exist
+                if os.path.exists(website_data.get('chunks_path', '')):
+                    print(f"  - Chunks file exists and is {os.path.getsize(website_data.get('chunks_path', ''))} bytes")
+                else:
+                    print(f"  - WARNING: Chunks file does not exist")
+                    
+                if os.path.exists(website_data.get('index_path', '')):
+                    print(f"  - Index file exists and is {os.path.getsize(website_data.get('index_path', ''))} bytes")
+                else:
+                    print(f"  - WARNING: Index file does not exist")
+        
         # Load processors for selected websites
         processors = []
         website_names = []
@@ -981,67 +1005,69 @@ def process_web_query():
             print("[WEB SEARCH] No valid website processors available")
             return jsonify({'success': False, 'error': 'No valid websites selected'})
         
-        print(f"[WEB SEARCH] Starting parallel search with {len(processors)} website processors")
+        print(f"[WEB SEARCH] Starting sequential search with {len(processors)} website processors")
         
-        # Process query using all selected web sources in parallel
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # Process query using all selected web sources sequentially to avoid threading issues
         import time
+        import gc  # For garbage collection
         
         start_time = time.time()
         combined_results = []
         used_sources = set()
         
-        def process_website(idx):
-            processor = processors[idx]
+        # Process each website sequentially instead of in parallel
+        for idx, processor in enumerate(processors):
             website_name = website_names[idx]
             query_id = str(uuid.uuid4())
             
             site_start_time = time.time()
             print(f"[WEB SEARCH] Processing {website_name}...")
             
-            # Process query
-            result = processor.process_query(
-                query_id,
-                query,
-                top_k=3  # Fewer results per source for web queries
-            )
-            
-            site_end_time = time.time()
-            processing_time = site_end_time - site_start_time
-            print(f"[WEB SEARCH] {website_name} completed in {processing_time:.2f}s")
-            
-            return {
-                'result': result,
-                'website_name': website_name,
-                'processing_time': processing_time
-            }
-        
-        # Use ThreadPoolExecutor to process websites in parallel
-        with ThreadPoolExecutor(max_workers=min(len(processors), 5)) as executor:
-            # Submit all tasks and collect futures
-            futures = [executor.submit(process_website, i) for i in range(len(processors))]
-            
-            # Process results as they complete
-            for future in as_completed(futures):
-                try:
-                    data = future.result()
-                    result = data['result']
-                    website_name = data['website_name']
-                    processing_time = data['processing_time']
-                    
-                    # Only add results if we got an answer
-                    if result['Answer'].strip():
-                        combined_results.append(result)
-                        used_sources.add(website_name)
-                        print(f"[WEB SEARCH] Got valid answer from {website_name} ({processing_time:.2f}s)")
+            try:
+                # Process query
+                result = processor.process_query(
+                    query_id,
+                    query,
+                    top_k=8  # Increase from 5 to 8 to get more context
+                )
+                
+                site_end_time = time.time()
+                processing_time = site_end_time - site_start_time
+                print(f"[WEB SEARCH] {website_name} completed in {processing_time:.2f}s")
+                
+                # Add more detailed debug about the result
+                answer_length = len(result['Answer']) if 'Answer' in result else 0
+                context_length = len(result['Context']) if 'Context' in result else 0
+                print(f"[WEB SEARCH] {website_name} result:")
+                print(f"  - Answer length: {answer_length} chars")
+                print(f"  - Context length: {context_length} chars")
+                print(f"  - Has answer: {'Yes' if answer_length > 0 else 'No'}")
+                
+                # Lower threshold for accepting answers - accept anything with content
+                if result['Answer'] and len(result['Answer'].strip()) > 0:
+                    combined_results.append(result)
+                    used_sources.add(website_name)
+                    print(f"[WEB SEARCH] Got valid answer from {website_name} ({processing_time:.2f}s)")
+                    print(f"[WEB SEARCH] Answer preview: {result['Answer'][:100]}...")
+                else:
+                    print(f"[WEB SEARCH] No valid answer from {website_name} ({processing_time:.2f}s)")
+                    # Print the context to debug why no answer was generated
+                    if 'Context' in result and result['Context']:
+                        print(f"[WEB SEARCH] Context preview: {result['Context'][:100]}...")
                     else:
-                        print(f"[WEB SEARCH] No valid answer from {website_name} ({processing_time:.2f}s)")
-                except Exception as e:
-                    print(f"[WEB SEARCH] Error processing website: {str(e)}")
+                        print(f"[WEB SEARCH] No context available")
+                
+                # Force garbage collection after each website
+                gc.collect()
+                
+            except Exception as e:
+                print(f"[WEB SEARCH] Error processing website {website_name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
         
         end_time = time.time()
         total_time = end_time - start_time
-        print(f"[WEB SEARCH] Parallel processing completed in {total_time:.2f} seconds")
+        print(f"[WEB SEARCH] Sequential processing completed in {total_time:.2f} seconds")
         
         if not combined_results:
             print("[WEB SEARCH] No results found from any web source")
@@ -1088,6 +1114,7 @@ def process_web_query():
         
         print(f"[WEB SEARCH] Combined answer from {len(combined_results)} sources in {total_time:.2f}s")
         print(f"[WEB SEARCH] Web sources: {', '.join([s['name'] for s in all_sources])}")
+        print(f"[WEB SEARCH] Combined answer length: {len(combined_answer)} chars")
         
         # Store in query history
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1116,6 +1143,8 @@ def process_web_query():
         })
     except Exception as e:
         print(f"[WEB SEARCH] Error processing web query: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/combined-query', methods=['POST'])
@@ -1124,15 +1153,15 @@ def process_combined_query():
     global QUERY_HISTORY
     
     data = request.json
-    query = data.get('query')
+    query = data.get('query', '')
     selected_sources = data.get('sources', [])
     selected_websites = data.get('websites', [])
-    language = data.get('language', 'en')
+    use_markdown = data.get('useMarkdown', False)
     
-    print(f"\n[COMBINED SEARCH] Query: '{query}'")
+    print(f"\n[COMBINED SEARCH] Query: '{limit_text_for_display(query)}'")
     print(f"[COMBINED SEARCH] Selected textbooks: {selected_sources}")
     print(f"[COMBINED SEARCH] Selected websites: {selected_websites}")
-    print(f"[COMBINED SEARCH] Language: {language}")
+    print(f"[COMBINED SEARCH] Use markdown: {use_markdown}")
     
     if not query:
         return jsonify({'success': False, 'error': 'No query provided'})
@@ -1145,6 +1174,7 @@ def process_combined_query():
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         import time
+        import gc  # Garbage collector
 
         start_time = time.time()
         results = {}
@@ -1155,7 +1185,7 @@ def process_combined_query():
             textbook_data = {
                 'query': query,
                 'sources': selected_sources,
-                'language': data.get('language', 'en')
+                'useMarkdown': use_markdown
             }
             print(f"[COMBINED SEARCH] Will query textbooks: {selected_sources}")
         
@@ -1165,7 +1195,7 @@ def process_combined_query():
             web_data = {
                 'query': query,
                 'websites': selected_websites,
-                'language': data.get('language', 'en')
+                'useMarkdown': use_markdown
             }
             print(f"[COMBINED SEARCH] Will query websites: {selected_websites}")
         
@@ -1182,8 +1212,8 @@ def process_combined_query():
                     return result.get_json()
                 return result
         
-        # Function to process web query
-        def process_web_query():
+        # Function to process web query - renamed to avoid recursion
+        def process_web_search():
             print("[COMBINED SEARCH] Processing web sources...")
             with app.test_request_context(
                 '/web-query', 
@@ -1195,34 +1225,31 @@ def process_combined_query():
                     return result.get_json()
                 return result
         
-        # Use ThreadPoolExecutor to run both searches in parallel
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = {}
-            
-            # Submit tasks based on selected sources
-            if textbook_data:
-                futures['textbook'] = executor.submit(process_textbook_query)
-            
-            if web_data:
-                futures['web'] = executor.submit(process_web_query)
-            
-            # Process results as they complete
-            for future in as_completed(futures.values()):
-                source = None
-                for src, fut in futures.items():
-                    if fut == future:
-                        source = src
-                        break
-                
-                try:
-                    results[source] = future.result()
-                    print(f"[COMBINED SEARCH] {source.capitalize()} search completed")
-                except Exception as e:
-                    print(f"[COMBINED SEARCH] Error processing {source} search: {str(e)}")
-                    results[source] = {'success': False, 'error': str(e)}
+        # Process searches sequentially to avoid OpenMP threading issues
+        if textbook_data:
+            print("[COMBINED SEARCH] Running textbook search")
+            try:
+                results['textbook'] = process_textbook_query()
+                print("[COMBINED SEARCH] Textbook search completed")
+                # Force garbage collection after task
+                gc.collect()
+            except Exception as e:
+                print(f"[COMBINED SEARCH] Error processing textbook search: {str(e)}")
+                results['textbook'] = {'success': False, 'error': str(e)}
+        
+        if web_data:
+            print("[COMBINED SEARCH] Running web search")
+            try:
+                results['web'] = process_web_search()
+                print("[COMBINED SEARCH] Web search completed")
+                # Force garbage collection after task
+                gc.collect()
+            except Exception as e:
+                print(f"[COMBINED SEARCH] Error processing web search: {str(e)}")
+                results['web'] = {'success': False, 'error': str(e)}
         
         end_time = time.time()
-        print(f"[COMBINED SEARCH] Parallel processing completed in {end_time - start_time:.2f} seconds")
+        print(f"[COMBINED SEARCH] Sequential processing completed in {end_time - start_time:.2f} seconds")
         
         # Check if we have any successful results
         textbook_result = results.get('textbook', {})
@@ -1278,8 +1305,17 @@ def process_combined_query():
             # Add web sources
             if 'web_sources' in web_result:
                 all_web_sources.extend(web_result['web_sources'])
+                
+            # Print debug info about the web result
+            print(f"[COMBINED SEARCH] Web answer length: {len(web_answer)}")
+            print(f"[COMBINED SEARCH] Web sections: {len(web_result.get('sections', []))}")
+            print(f"[COMBINED SEARCH] Web sources: {len(web_result.get('web_sources', []))}")
         
         print(f"[COMBINED SEARCH] Combined answer created successfully")
+        print(f"[COMBINED SEARCH] Final answer length: {len(combined_answer)}")
+        print(f"[COMBINED SEARCH] Final sections: {len(all_sections)}")
+        print(f"[COMBINED SEARCH] Final pages: {len(all_pages)}")
+        print(f"[COMBINED SEARCH] Final web sources: {len(all_web_sources)}")
         
         # Store in query history
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1291,7 +1327,7 @@ def process_combined_query():
             'sources': ", ".join([s['name'] for s in all_web_sources]) if all_web_sources else "Textbooks",
             'sections': ", ".join(all_sections),
             'pages': ", ".join(all_pages),
-            'language': language,
+            'language': 'en',
             'type': 'combined_query'
         }
         QUERY_HISTORY.append(history_entry)
@@ -1301,11 +1337,13 @@ def process_combined_query():
             'answer': combined_answer,
             'sections': all_sections,
             'pages': all_pages,
-            'language': language,
+            'language': 'en',
             'web_sources': all_web_sources
         })
     except Exception as e:
         print(f"[COMBINED SEARCH] Error processing combined query: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/books', methods=['GET'])
@@ -1432,7 +1470,7 @@ def websites_page():
 if __name__ == '__main__':
     # Print clear message about where the app is running
     ip = '0.0.0.0'  # This makes it accessible from other machines
-    port = 5000
+    port = 5001
     print("\n" + "="*60)
     print(f"LUMO AI Agent is running on:")
     print(f"Local URL:   http://127.0.0.1:{port}")
