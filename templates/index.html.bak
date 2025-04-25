@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumo - Multilingual Textbook Q&amp;A</title>
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+    <style>
+        :root {
+            /* Modern Color Palette */
+            --primary-color: #4285F4;
+            --primary-dark: #3367D6;
+            --primary-light: #E8F0FE;
+            --accent-color: #34A853;
+            --warning-color: #FBBC05;
+            --error-color: #EA4335;
+            --text-color: #202124;
+            --text-secondary: #5F6368;
+            --muted-text: #9AA0A6;
+            --background-color: #FFFFFF;
+            --card-bg: #FFFFFF;
+            --border-color: #DADCE0;
+            --input-bg: #F1F3F4;
+            --hover-color: #F1F3F4;
+            
+            /* Glass Effect */
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.25);
+            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            --backdrop-blur: 10px;
+            
+            /* UI Properties */
+            --border-radius: 12px;
+            --button-radius: 8px;
+            --card-radius: 12px;
+            --transition-speed: 0.3s;
+            --z-index-base: 1;
+            --z-index-modal: 10;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            
+            /* RGB versions for alpha manipulation */
+            --primary-color-rgb: 66, 133, 244;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+        
+        /* Export buttons styles */
+        .export-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .export-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .export-button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .export-button.csv {
+            background-color: #28a745;
+        }
+        
+        .export-button.csv:hover {
+            background-color: #218838;
+        }
+        
+        .export-button.excel {
+            background-color: #17a2b8;
+        }
+        
+        .export-button.excel:hover {
+            background-color: #138496;
+        }
+        
+        .export-button.clear {
+            background-color: #dc3545;
+        }
+        
+        .export-button.clear:hover {
+            background-color: #c82333;
+        }
+        
+        /* History counter badge */
+        .history-counter {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 0.8rem;
+            margin-left: 5px;
+            min-width: 20px;
+            font-weight: 600;
+        }
+
+        .website-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .input-field {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+        
+        /* Action Buttons */
+        .action-button, .upload-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--button-radius);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .action-button:hover, .upload-btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        }
+        
+        .action-button i, .upload-btn i {
+            font-size: 1rem;
+        }
+        
+        .books-actions {
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .approved-websites-list {
+            margin-top: 15px;
+        }
+        
+        .website-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            background-color: var(--card-bg);
+        }
+        
+        .website-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+        
+        .website-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .website-url {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+        
+        .website-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .website-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-color);
+            padding: 5px;
+            border-radius: 4px;
+        }
+        
+        .website-button:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .website-button.delete {
+            color: #dc3545;
+        }
+        
+        .option-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 8px 0;
+        }
+        
+        /* Web source attribution */
+        .web-source {
+            display: flex;
+            align-items: center;
+            margin-top: 4px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .web-source i {
+            margin-right: 5px;
+        }
+        
+        .web-source a {
+            color: var(--primary-color);
+            text-decoration: underline;
+            margin-left: 5px;
+        }
+        
+        .source-list {
+            margin-top: 10px;
+        }
+        
+        .source-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            background-color: var(--card-bg);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .source-item-name {
+            font-weight: 500;
+            flex: 1;
+        }
+        
+        .no-sources {
+            color: var(--text-secondary);
+        }
+        
+        .no-sources a {
+            color: var(--primary-color);
+            text-decoration: underline;
+        }
+        
+        /* Book panel styles */
+        .book-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-md);
+        }
+        
+        .book-card {
+            border: 1px solid var(--border-color);
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background-color: var(--card-bg);
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .book-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .book-header {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .book-name {
+            margin: 0;
+            font-size: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 500;
+        }
+        
+        .book-content {
+            padding: var(--spacing-md);
+        }
+        
+        .book-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 0.85rem;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .meta-label {
+            color: var(--text-secondary);
+        }
+        
+        .meta-value {
+            font-weight: 500;
+        }
+        
+        .book-actions {
+            display: flex;
+            justify-content: center;
+            padding: 10px 0 5px;
+            border-top: 1px solid var(--border-color);
+            margin-top: 8px;
+        }
+        
+        .book-card .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        
+        .book-card input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary-color);
+        }
+        
+        .selected-indicator {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            background-color: var(--accent-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        /* Loading spinner */
+        .loading-spinner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-lg);
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--hover-color);
+            border-radius: 50%;
+            border-top: 3px solid var(--primary-color);
+            animation: spin 1s linear infinite;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .no-books {
+            text-align: center;
+            padding: var(--spacing-lg);
+            background-color: var(--card-bg);
+            border-radius: var(--card-radius);
+            border: 1px dashed var(--border-color);
+            margin-top: var(--spacing-md);
+        }
+        
+        .no-books i {
+            font-size: 2.5rem;
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-md);
+            opacity: 0.5;
+        }
+        
+        .no-books h3 {
+            font-weight: 500;
+            margin-bottom: var(--spacing-sm);
+            color: var(--text-color);
+        }
+        
+        .no-books p {
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-sm);
+        }
+        
+        .success-message {
+            background-color: #E6F4EA;
+            color: #137333;
+            padding: 12px 16px;
+            border-radius: var(--border-radius);
+            margin: var(--spacing-md) 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: fadeIn 0.5s;
+        }
+        
+        .error-message {
+            background-color: #FCE8E6;
+            color: #C5221F;
+            padding: 12px 16px;
+            border-radius: var(--border-radius);
+            margin: var(--spacing-md) 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: fadeIn 0.5s;
+        }
+        
+        .success-message i, .error-message i {
+            font-size: 1rem;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Container styles */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+            padding-bottom: 60px; /* Add padding to account for fixed navbar */
+            background-color: var(--background-color);
+            max-width: 100%;
+        }
+        
+        /* Panel styles */
+        #chat-panel, #settings-panel, #history-panel, #books-panel {
+            flex: 1;
+            overflow-y: auto;
+            transition: all 0.3s ease;
+            background-color: var(--background-color);
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-md);
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        
+        .panel-header h2 {
+            margin: 0;
+            font-size: 1.3rem;
+            font-weight: 500;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+        }
+        
+        .panel-header h2 i {
+            margin-right: 10px;
+            color: var(--primary-color);
+        }
+        
+        .close-button {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        
+        .close-button:hover {
+            background-color: var(--hover-color);
+        }
+        
+        .panel-content {
+            padding: var(--spacing-md);
+            overflow-y: auto;
+        }
+        
+        /* Books panel specific styles */
+        .books-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: var(--spacing-md);
+        }
+        
+        /* Bottom navbar */
+        .bottom-navbar {
+            display: flex;
+            justify-content: space-around;
+            background-color: white;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            padding: 0;
+            height: 60px;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex: 1;
+            color: var(--text-secondary);
+            transition: color var(--transition-speed) ease;
+            height: 100%;
+            position: relative;
+        }
+        
+        .nav-item i {
+            font-size: 1.2rem;
+            margin-bottom: 4px;
+        }
+        
+        .nav-item span {
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+        
+        .nav-item.active {
+            color: var(--primary-color);
+        }
+        
+        .nav-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 25%;
+            width: 50%;
+            height: 3px;
+            background-color: var(--primary-color);
+            border-radius: 3px 3px 0 0;
+        }
+        
+        .nav-item:hover {
+            color: var(--primary-color);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .books-container {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            }
+            
+            .panel-header h2 {
+                font-size: 1.2rem;
+            }
+            
+            .nav-item span {
+                font-size: 0.65rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .panel-content {
+                padding: var(--spacing-sm);
+            }
+            
+            .book-cards {
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            }
+        }
+
+        body {
+            min-height: 100vh;
+            height: 100vh;
+            background: #F8F9FA;
+            color: var(--text-color);
+            transition: background var(--transition-speed) ease;
+            overflow: hidden;
+        }
+
+        /* Chat Panel Styling */
+        #chat-panel {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--background-color);
+            height: 100%;
+        }
+        
+        .chat-header {
+            padding: var(--spacing-md);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--card-bg);
+        }
+        
+        .chat-title {
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .chat-title i {
+            color: var(--primary-color);
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: var(--spacing-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+        
+        .message {
+            display: flex;
+            max-width: 85%;
+        }
+        
+        .message.user {
+            align-self: flex-end;
+        }
+        
+        .message.assistant {
+            align-self: flex-start;
+        }
+        
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 18px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .message.user .message-content {
+            background-color: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.assistant .message-content {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message.error .message-content {
+            background-color: var(--error-color);
+            color: white;
+        }
+        
+        .message.system .message-content {
+            background-color: var(--input-bg);
+            color: var(--text-secondary);
+            font-style: italic;
+            max-width: 100%;
+            border: 1px solid var(--border-color);
+        }
+        
+        .chat-input-container {
+            display: flex;
+            padding: var(--spacing-md);
+            border-top: 1px solid var(--border-color);
+            background-color: var(--card-bg);
+            position: relative;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 12px;
+            padding-right: 40px;
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            font-size: 1rem;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            resize: none;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+        }
+        
+        .send-button {
+            position: absolute;
+            right: calc(var(--spacing-md) + 5px);
+            bottom: calc(var(--spacing-md) + 5px);
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        
+        .send-button:hover {
+            background-color: var(--primary-dark);
+            transform: scale(1.05);
+        }
+        
+        .send-button:disabled {
+            background-color: var(--border-color);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            margin-bottom: var(--spacing-md);
+            align-self: flex-start;
+            max-width: 100px;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--text-secondary);
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: typing-animation 1.4s infinite;
+            opacity: 0.7;
+        }
+        
+        .typing-dot:nth-child(1) {
+            animation-delay: 0s;
+        }
+        
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing-animation {
+            0%, 60%, 100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-5px);
+            }
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #28a745;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="chat-panel">
+            <div class="chat-header">
+                <h2 class="chat-title">
+                    <i class="fas fa-comment"></i>
+                    Chat with Textbooks
+                </h2>
+                <div class="status-indicator">
+                    <span id="status-dot" class="status-dot"></span>
+                    <span id="status-text">Ready</span>
+                </div>
+            </div>
+            
+            <div id="chat-messages" class="chat-messages">
+                <!-- Chat messages will be dynamically added here -->
+                <div class="message system">
+                    <div class="message-content">
+                        Welcome! Upload a textbook or PDF to get started. You can also add approved websites in the Settings panel to enable web search.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <textarea id="user-input" class="chat-input" placeholder="Ask a question about your textbook..." disabled></textarea>
+                <button id="send-button" class="send-button" disabled>
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/script.js"></script>
+    <script>
+        // Conversation history counter
+        let historyCount = 0;
+        const historyCounter = document.getElementById('history-count');
+        
+        // Reset all data
+        document.getElementById('reset-all-button').addEventListener('click', function() {
+            if (confirm('Are you sure you want to reset all data? This will remove all uploaded textbooks and their vector stores. This cannot be undone.')) {
+                fetch('/reset-all', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reset history counter
+                        historyCount = 0;
+                        historyCounter.textContent = '0';
+                        
+                        // Update UI for no files
+                        document.getElementById('current-file-text').textContent = 'No file uploaded';
+                        document.getElementById('send-button').disabled = true;
+                        document.getElementById('user-input').disabled = true;
+                        
+                        // Show confirmation
+                        alert('All data has been reset. You can now upload a new textbook.');
+                        
+                        // Reload the page to reset the UI completely
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to reset data. Please try again.');
+                });
+            }
+        });
+        
+        // Export functionality
+        document.getElementById('export-csv').addEventListener('click', function() {
+            window.location.href = '/export-csv';
+        });
+        
+        document.getElementById('export-excel').addEventListener('click', function() {
+            window.location.href = '/export-excel';
+        });
+        
+        document.getElementById('export-csv-history').addEventListener('click', function() {
+            window.location.href = '/export-csv';
+        });
+        
+        document.getElementById('export-excel-history').addEventListener('click', function() {
+            window.location.href = '/export-excel';
+        });
+        
+        // Clear history
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear your conversation history? This cannot be undone.')) {
+                fetch('/clear-history', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reset history counter
+                        historyCount = 0;
+                        historyCounter.textContent = '0';
+                        
+                        // Show confirmation
+                        alert('Conversation history has been cleared.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to clear history. Please try again.');
+                });
+            }
+        }
+        
+        document.getElementById('clear-history').addEventListener('click', clearHistory);
+        document.getElementById('clear-history-panel').addEventListener('click', clearHistory);
+        
+        // Update message counter when messages are added
+        const originalAddMessage = window.addMessage;
+        window.addMessage = function(type, content, metadata = null) {
+            // Call the original function
+            originalAddMessage(type, content, metadata);
+            
+            // Only count assistant messages
+            if (type === 'assistant') {
+                historyCount++;
+                historyCounter.textContent = historyCount;
+            }
+        };
+
+        // History button functionality
+        document.getElementById('history-button').addEventListener('click', function() {
+            document.getElementById('history-panel').style.right = '0';
+            document.getElementById('overlay').style.display = 'block';
+        });
+
+        // Close history panel
+        document.getElementById('close-history').addEventListener('click', function() {
+            document.getElementById('history-panel').style.right = '-100%';
+            document.getElementById('overlay').style.display = 'none';
+        });
+        
+        // Close panels when overlay is clicked
+        document.getElementById('overlay').addEventListener('click', function() {
+            document.getElementById('history-panel').style.right = '-100%';
+            document.getElementById('settings-panel').classList.remove('active');
+            document.getElementById('about-panel').classList.remove('active');
+            this.style.display = 'none';
+        });
+
+        // Web search functionality
+        let approvedWebsites = {};
+        let useTextbooks = true;
+        let useWebSearch = false;
+        
+        // Fetch existing approved websites when page loads
+        fetch('/websites')
+            .then(response => response.json())
+            .then(data => {
+                approvedWebsites = data;
+                updateWebsitesList();
+            })
+            .catch(error => {
+                console.error('Error loading approved websites:', error);
+            });
+        
+        // Add website functionality
+        document.getElementById('add-website-button').addEventListener('click', function() {
+            const urlInput = document.getElementById('website-url');
+            const nameInput = document.getElementById('website-name');
+            
+            const url = urlInput.value.trim();
+            const name = nameInput.value.trim();
+            
+            if (!url) {
+                alert('Please enter a valid URL');
+                return;
+            }
+            
+            // Update status
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            statusText.textContent = 'Processing website...';
+            statusDot.style.backgroundColor = '#ffc107'; // Yellow for processing
+            
+            // Send request to add website
+            fetch('/add-website', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: url,
+                    name: name
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    approvedWebsites = data.websites;
+                    updateWebsitesList();
+                    
+                    // Clear form
+                    urlInput.value = '';
+                    nameInput.value = '';
+                    
+                    // Update status
+                    statusText.textContent = 'Website added';
+                    statusDot.style.backgroundColor = '#28a745'; // Green for success
+                    setTimeout(() => {
+                        statusText.textContent = 'Ready';
+                        statusDot.style.backgroundColor = '#28a745';
+                    }, 3000);
+                    
+                    // Check if web search is enabled
+                    if (!useWebSearch) {
+                        document.getElementById('web-toggle').checked = true;
+                        useWebSearch = true;
+                    }
+                    
+                    // Enable send button if it was disabled
+                    document.getElementById('send-button').disabled = false;
+                    document.getElementById('user-input').disabled = false;
+                    
+                } else {
+                    alert('Error adding website: ' + data.error);
+                    statusText.textContent = 'Error';
+                    statusDot.style.backgroundColor = '#dc3545'; // Red for error
+                    setTimeout(() => {
+                        statusText.textContent = 'Ready';
+                        statusDot.style.backgroundColor = '#28a745';
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to add website. Please try again.');
+                
+                statusText.textContent = 'Error';
+                statusDot.style.backgroundColor = '#dc3545'; // Red for error
+                setTimeout(() => {
+                    statusText.textContent = 'Ready';
+                    statusDot.style.backgroundColor = '#28a745';
+                }, 3000);
+            });
+        });
+        
+        // Function to update the websites list in the UI
+        function updateWebsitesList() {
+            const websitesList = document.getElementById('approved-websites-list');
+            
+            if (Object.keys(approvedWebsites).length === 0) {
+                websitesList.innerHTML = '<p>No approved websites added yet</p>';
+                return;
+            }
+            
+            let html = '';
+            for (const [key, website] of Object.entries(approvedWebsites)) {
+                html += `
+                <div class="website-item" data-name="${key}">
+                    <div class="website-info">
+                        <div class="website-name">${website.name}</div>
+                        <div class="website-url">${website.url}</div>
+                    </div>
+                    <div class="website-controls">
+                        <button class="website-button delete" title="Remove website" onclick="removeWebsite('${key}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                `;
+            }
+            
+            websitesList.innerHTML = html;
+        }
+        
+        // Function to remove a website
+        window.removeWebsite = function(name) {
+            if (confirm(`Are you sure you want to remove the website "${name}"?`)) {
+                fetch(`/websites/${name}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        approvedWebsites = data.websites;
+                        updateWebsitesList();
+                        
+                        // Check if we need to disable web search
+                        if (Object.keys(approvedWebsites).length === 0 && useWebSearch) {
+                            useWebSearch = false;
+                            document.getElementById('web-toggle').checked = false;
+                            
+                            // If no textbooks and no websites, disable send button
+                            const currentFileText = document.getElementById('current-file-text').textContent;
+                            if (currentFileText === 'No file uploaded' && !useTextbooks) {
+                                document.getElementById('send-button').disabled = true;
+                                document.getElementById('user-input').disabled = true;
+                            }
+                        }
+                    } else {
+                        alert('Error removing website: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to remove website. Please try again.');
+                });
+            }
+        };
+        
+        // Toggle search options
+        document.getElementById('textbook-toggle').addEventListener('change', function() {
+            useTextbooks = this.checked;
+            
+            // Check if we need to disable the send button
+            if (!useTextbooks && !useWebSearch) {
+                document.getElementById('send-button').disabled = true;
+                document.getElementById('user-input').disabled = true;
+            } else if ((!useTextbooks && useWebSearch && Object.keys(approvedWebsites).length > 0) || 
+                        (useTextbooks && document.getElementById('current-file-text').textContent !== 'No file uploaded')) {
+                document.getElementById('send-button').disabled = false;
+                document.getElementById('user-input').disabled = false;
+            }
+        });
+        
+        document.getElementById('web-toggle').addEventListener('change', function() {
+            useWebSearch = this.checked;
+            
+            // Check if we need to disable the send button
+            if (!useWebSearch && !useTextbooks) {
+                document.getElementById('send-button').disabled = true;
+                document.getElementById('user-input').disabled = true;
+            } else if ((useWebSearch && Object.keys(approvedWebsites).length > 0) || 
+                       (useTextbooks && document.getElementById('current-file-text').textContent !== 'No file uploaded')) {
+                document.getElementById('send-button').disabled = false;
+                document.getElementById('user-input').disabled = false;
+            }
+            
+            // If enabling web search but no approved websites, show a message
+            if (useWebSearch && Object.keys(approvedWebsites).length === 0) {
+                alert('You need to add at least one approved website to use web search. Please add a website in the Approved Websites section.');
+                this.checked = false;
+                useWebSearch = false;
+            }
+        });
+        
+        // Override the existing message sending function to handle web search
+        const originalSendMessage = window.sendMessage;
+        window.sendMessage = function() {
+            const userInput = document.getElementById('user-input');
+            const query = userInput.value.trim();
+            
+            if (!query) return;
+            
+            // Add user message to chat
+            addMessage('user', query);
+            
+            // Clear input field
+            userInput.value = '';
+            
+            // Show typing indicator
+            addTypingIndicator();
+            
+            // Update status
+            const statusText = document.getElementById('status-text');
+            const statusDot = document.getElementById('status-dot');
+            statusText.textContent = 'Processing...';
+            statusDot.style.backgroundColor = '#ffc107'; // Yellow for processing
+            
+            // Get selected sources (textbooks)
+            let selectedSources = [];
+            if (useTextbooks) {
+                const sourceElements = document.querySelectorAll('.source-item.selected');
+                sourceElements.forEach(element => {
+                    selectedSources.push(element.dataset.name);
+                });
+            }
+            
+            // Get selected websites
+            let selectedWebsites = [];
+            if (useWebSearch) {
+                selectedWebsites = Object.keys(approvedWebsites);
+            }
+            
+            // Determine which API endpoint to use based on search options
+            let endpoint, requestData;
+            
+            if (useTextbooks && useWebSearch) {
+                // Combined search
+                endpoint = '/combined-query';
+                requestData = {
+                    query: query,
+                    sources: selectedSources,
+                    websites: selectedWebsites,
+                    language: document.getElementById('language-selector').value
+                };
+            } else if (useWebSearch) {
+                // Web search only
+                endpoint = '/web-query';
+                requestData = {
+                    query: query,
+                    websites: selectedWebsites,
+                    language: document.getElementById('language-selector').value
+                };
+            } else {
+                // Textbook search only (original behavior)
+                endpoint = '/query';
+                requestData = {
+                    query: query,
+                    sources: selectedSources,
+                    language: document.getElementById('language-selector').value
+                };
+            }
+            
+            // Send request to appropriate endpoint
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                if (data.success) {
+                    // Prepare metadata for citation display
+                    const metadata = {
+                        sections: data.sections || [],
+                        pages: data.pages || [],
+                        web_sources: data.web_sources || []
+                    };
+                    
+                    // Add AI response to chat
+                    addMessage('assistant', data.answer, metadata);
+                    
+                    // Update status
+                    statusText.textContent = 'Ready';
+                    statusDot.style.backgroundColor = '#28a745';
+                } else {
+                    // Add error message
+                    addMessage('error', 'Error: ' + data.error);
+                    
+                    // Update status
+                    statusText.textContent = 'Error';
+                    statusDot.style.backgroundColor = '#dc3545';
+                    setTimeout(() => {
+                        statusText.textContent = 'Ready';
+                        statusDot.style.backgroundColor = '#28a745';
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                // Add error message
+                addMessage('error', 'Network error. Please try again.');
+                
+                // Update status
+                statusText.textContent = 'Error';
+                statusDot.style.backgroundColor = '#dc3545';
+                setTimeout(() => {
+                    statusText.textContent = 'Ready';
+                    statusDot.style.backgroundColor = '#28a745';
+                }, 3000);
+            });
+        };
+
+        // Navigation between panels
+        document.getElementById('nav-settings').addEventListener('click', function() {
+            // Load current source info
+            updateSourcesList();
+            
+            // Show settings panel
+            document.getElementById('settings-panel').classList.add('active');
+            document.getElementById('about-panel').classList.remove('active');
+            document.getElementById('overlay').style.display = 'block';
+            
+            // Update bottom nav
+            document.getElementById('nav-chat').classList.remove('active');
+            document.getElementById('nav-settings').classList.add('active');
+            document.getElementById('nav-info').classList.remove('active');
+        });
+        
+        // Function to fetch and update the selected sources list
+        function updateSourcesList() {
+            fetch('/selected-sources')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const selectedSources = data.selected_sources || [];
+                        const sourcesList = document.getElementById('selected-sources-list');
+                        
+                        if (selectedSources.length === 0) {
+                            sourcesList.innerHTML = '<p class="no-sources">No textbooks selected. Visit the <a href="/books-page">Books page</a> to select sources.</p>';
+                            return;
+                        }
+                        
+                        let html = '';
+                        selectedSources.forEach(source => {
+                            html += `
+                            <div class="source-item">
+                                <div class="source-item-name">${source}</div>
+                                <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                            </div>
+                            `;
+                        });
+                        
+                        sourcesList.innerHTML = html;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading selected sources:', error);
+                    document.getElementById('selected-sources-list').innerHTML = 
+                        '<p class="no-sources">Error loading sources. Please refresh the page.</p>';
+                });
+        }
+
+        // Function to toggle the settings panel
+        function toggleSettings() {
+            const panels = ['settings-panel', 'chat-panel', 'history-panel', 'books-panel'];
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            // Remove active class from all nav items
+            navItems.forEach(item => item.classList.remove('active'));
+            
+            // Add active class to settings nav item
+            document.querySelector('.nav-item[onclick="toggleSettings()"]').classList.add('active');
+            
+            // Show the settings panel, hide others
+            panels.forEach(panel => {
+                if (panel === 'settings-panel') {
+                    document.getElementById(panel).style.display = 'block';
+                } else {
+                    document.getElementById(panel).style.display = 'none';
+                }
+            });
+        }
+        
+        // Function to toggle the history panel
+        function toggleHistory() {
+            const panels = ['settings-panel', 'chat-panel', 'history-panel', 'books-panel'];
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            // Remove active class from all nav items
+            navItems.forEach(item => item.classList.remove('active'));
+            
+            // Add active class to history nav item
+            document.querySelector('.nav-item[onclick="toggleHistory()"]').classList.add('active');
+            
+            // Show the history panel, hide others
+            panels.forEach(panel => {
+                if (panel === 'history-panel') {
+                    document.getElementById(panel).style.display = 'block';
+                    loadChatHistory();
+                } else {
+                    document.getElementById(panel).style.display = 'none';
+                }
+            });
+        }
+        
+        // Function to toggle the books panel
+        function toggleBooks() {
+            const panels = ['settings-panel', 'chat-panel', 'history-panel', 'books-panel'];
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            // Remove active class from all nav items
+            navItems.forEach(item => item.classList.remove('active'));
+            
+            // Add active class to books nav item
+            document.querySelector('.nav-item[onclick="toggleBooks()"]').classList.add('active');
+            
+            // Show the books panel, hide others
+            panels.forEach(panel => {
+                if (panel === 'books-panel') {
+                    document.getElementById(panel).style.display = 'block';
+                    loadBooks();
+                } else {
+                    document.getElementById(panel).style.display = 'none';
+                }
+            });
+        }
+        
+        // Function to close any open panel and show the chat
+        function showChat() {
+            const panels = ['settings-panel', 'chat-panel', 'history-panel', 'books-panel'];
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            // Remove active class from all nav items
+            navItems.forEach(item => item.classList.remove('active'));
+            
+            // Add active class to chat nav item
+            document.querySelector('.nav-item[onclick="showChat()"]').classList.add('active');
+            
+            // Show the chat panel, hide others
+            panels.forEach(panel => {
+                if (panel === 'chat-panel') {
+                    document.getElementById(panel).style.display = 'block';
+                } else {
+                    document.getElementById(panel).style.display = 'none';
+                }
+            });
+        }
+        
+        // Variable to store selected books
+        let selectedBooks = [];
+        
+        // Function to load books
+        function loadBooks() {
+            const booksContainer = document.getElementById('books-container');
+            const loadingSpinner = document.getElementById('books-loading');
+            
+            loadingSpinner.style.display = 'block';
+            booksContainer.innerHTML = '';
+            
+            fetch('/get_books')
+                .then(response => response.json())
+                .then(data => {
+                    loadingSpinner.style.display = 'none';
+                    
+                    if (data.books.length === 0) {
+                        booksContainer.innerHTML = `
+                            <div class="no-books">
+                                <i class="fas fa-book"></i>
+                                <p>No textbooks found</p>
+                                <p>Upload a textbook to start using it for queries</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // Get selected books
+                    fetch('/get_selected_books')
+                        .then(response => response.json())
+                        .then(selectedData => {
+                            selectedBooks = selectedData.selected_books || [];
+                            
+                            // Create book cards
+                            const bookCardsContainer = document.createElement('div');
+                            bookCardsContainer.className = 'book-cards';
+                            
+                            data.books.forEach(book => {
+                                const isSelected = selectedBooks.includes(book.filename);
+                                
+                                const bookCard = document.createElement('div');
+                                bookCard.className = 'book-card';
+                                bookCard.innerHTML = `
+                                    <div class="book-header">
+                                        <h3 class="book-name">${book.name}</h3>
+                                    </div>
+                                    <div class="book-content">
+                                        <div class="book-meta">
+                                            <div class="meta-item">
+                                                <span class="meta-label">Type:</span>
+                                                <span class="meta-value">${book.type || 'PDF'}</span>
+                                            </div>
+                                            <div class="meta-item">
+                                                <span class="meta-label">Pages:</span>
+                                                <span class="meta-value">${book.pages || 'N/A'}</span>
+                                            </div>
+                                        </div>
+                                        <div class="book-actions">
+                                            <label class="checkbox-wrapper">
+                                                <input type="checkbox" name="book" value="${book.filename}" ${isSelected ? 'checked' : ''}>
+                                                <span>Select for queries</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    ${isSelected ? '<div class="selected-indicator"><i class="fas fa-check"></i></div>' : ''}
+                                `;
+                                
+                                // Add event listener to toggle selected status
+                                const checkbox = bookCard.querySelector('input[type="checkbox"]');
+                                checkbox.addEventListener('change', function() {
+                                    toggleBookSelection(book.filename, this.checked);
+                                    
+                                    // Update visual indicator
+                                    const indicator = bookCard.querySelector('.selected-indicator');
+                                    if (this.checked) {
+                                        if (!indicator) {
+                                            const newIndicator = document.createElement('div');
+                                            newIndicator.className = 'selected-indicator';
+                                            newIndicator.innerHTML = '<i class="fas fa-check"></i>';
+                                            bookCard.appendChild(newIndicator);
+                                        }
+                                    } else {
+                                        if (indicator) {
+                                            indicator.remove();
+                                        }
+                                    }
+                                });
+                                
+                                bookCardsContainer.appendChild(bookCard);
+                            });
+                            
+                            booksContainer.appendChild(bookCardsContainer);
+                        });
+                })
+                .catch(error => {
+                    console.error('Error loading books:', error);
+                    loadingSpinner.style.display = 'none';
+                    booksContainer.innerHTML = `
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span>Failed to load books. Please try again.</span>
+                        </div>
+                    `;
+                });
+        }
+        
+        // Function to toggle book selection
+        function toggleBookSelection(filename, isSelected) {
+            if (isSelected) {
+                if (!selectedBooks.includes(filename)) {
+                    selectedBooks.push(filename);
+                }
+            } else {
+                selectedBooks = selectedBooks.filter(book => book !== filename);
+            }
+            
+            // Save selected books to server
+            fetch('/update_selected_books', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ selected_books: selectedBooks })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message which disappears after 3 seconds
+                    const successMsg = document.createElement('div');
+                    successMsg.className = 'success-message';
+                    successMsg.innerHTML = '<i class="fas fa-check-circle"></i><span>Book selection updated successfully</span>';
+                    
+                    const booksContainer = document.getElementById('books-container');
+                    booksContainer.insertBefore(successMsg, booksContainer.firstChild);
+                    
+                    setTimeout(() => {
+                        successMsg.remove();
+                    }, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating book selection:', error);
+            });
+        }
+        
+        // Function to handle book upload
+        function handleBookUpload() {
+            const fileInput = document.getElementById('book-file-input');
+            fileInput.click();
+        }
+        
+        // Function to upload book file
+        function uploadBookFile() {
+            const fileInput = document.getElementById('book-file-input');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                return;
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Show loading state
+            const booksContainer = document.getElementById('books-container');
+            const loadingSpinner = document.getElementById('books-loading');
+            loadingSpinner.style.display = 'block';
+            
+            // Upload file
+            fetch('/upload_book', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingSpinner.style.display = 'none';
+                
+                if (data.success) {
+                    // Show success message
+                    const successMsg = document.createElement('div');
+                    successMsg.className = 'success-message';
+                    successMsg.innerHTML = `<i class="fas fa-check-circle"></i><span>${data.message || 'Book uploaded successfully'}</span>`;
+                    
+                    booksContainer.insertBefore(successMsg, booksContainer.firstChild);
+                    
+                    setTimeout(() => {
+                        successMsg.remove();
+                    }, 3000);
+                    
+                    // Reload books
+                    loadBooks();
+                } else {
+                    // Show error message
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'error-message';
+                    errorMsg.innerHTML = `<i class="fas fa-exclamation-circle"></i><span>${data.message || 'Failed to upload book'}</span>`;
+                    
+                    booksContainer.insertBefore(errorMsg, booksContainer.firstChild);
+                    
+                    setTimeout(() => {
+                        errorMsg.remove();
+                    }, 5000);
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading book:', error);
+                loadingSpinner.style.display = 'none';
+                
+                // Show error message
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'error-message';
+                errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i><span>Failed to upload book. Please try again.</span>';
+                
+                booksContainer.insertBefore(errorMsg, booksContainer.firstChild);
+                
+                setTimeout(() => {
+                    errorMsg.remove();
+                }, 5000);
+            });
+            
+            // Reset file input
+            fileInput.value = '';
+        }
+    </script>
+</body>
+</html>

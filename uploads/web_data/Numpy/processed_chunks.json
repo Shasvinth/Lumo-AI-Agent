@@ -1,0 +1,93 @@
+[
+  {
+    "chunk_id": "web_Numpy_0",
+    "text": "NumPy documentation \u2014 NumPy v2.2 Manual Skip to main content Back to top Ctrl + K Choose version GitHub NumPy documentation # Version : 2.2 Download documentation : User guide (PDF) | Reference guide (PDF) | All (ZIP) | Historical versions of documentation Useful links : Installation | Source Repository | Issue Tracker | Q&A Support | Mailing List NumPy is the fundamental package for scientific computing in Python. It is a",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_1",
+    "text": "Python library that provides a multidimensional array object, various derived",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_2",
+    "text": "objects (such as masked arrays and matrices), and an assortment of routines for",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_3",
+    "text": "fast operations on arrays, including mathematical, logical, shape manipulation,",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_4",
+    "text": "sorting, selecting, I/O, discrete Fourier transforms, basic linear algebra,",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_5",
+    "text": "basic statistical operations, random simulation and much more. Getting started New to NumPy? Check out the Absolute Beginner\u2019s Guide. It contains an",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_6",
+    "text": "introduction to NumPy\u2019s main concepts and links to additional tutorials. To the absolute beginner\u2019s guide User guide The user guide provides in-depth information on the",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_7",
+    "text": "key concepts of NumPy with useful background information and explanation. To the user guide API reference The reference guide contains a detailed description of the functions,",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_8",
+    "text": "modules, and objects included in NumPy. The reference describes how the",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_9",
+    "text": "methods work and which parameters can be used. It assumes that you have an",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_10",
+    "text": "understanding of the key concepts. To the reference guide Contributor\u2019s guide Want to add to the codebase? Can help add translation or a flowchart to the",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_11",
+    "text": "documentation? The contributing guidelines will guide you through the",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  },
+  {
+    "chunk_id": "web_Numpy_12",
+    "text": "process of improving NumPy. To the contributor\u2019s guide",
+    "page": "web",
+    "section": "Numpy",
+    "source_url": "https://numpy.org/doc/stable/"
+  }
+]

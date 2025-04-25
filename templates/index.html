@@ -190,6 +190,70 @@
             text-decoration: underline;
             margin-left: 5px;
         }
+        
+        .source-list {
+            margin-top: 10px;
+        }
+        
+        .source-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            background-color: var(--card-bg);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .source-item-name {
+            font-weight: 500;
+            flex: 1;
+        }
+        
+        .no-sources {
+            color: var(--text-secondary);
+        }
+        
+        .no-sources a {
+            color: var(--primary-color);
+            text-decoration: underline;
+        }
+        
+        .website-list {
+            margin-top: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 5px;
+        }
+        
+        .website-item {
+            padding: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .website-item:last-child {
+            border-bottom: none;
+        }
+        
+        .website-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        
+        .website-url {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+        }
+        
+        .loading-websites {
+            color: var(--text-secondary);
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+        }
     </style>
 </head>
 <body>
@@ -207,6 +271,9 @@
                         <div id="status-dot"></div>
                         <span id="status-text">Ready</span>
                     </div>
+                    <a href="/books-page" class="icon-button" title="View Processed Books">
+                        <i class="fas fa-book"></i>
+                    </a>
                     <button id="history-button" class="icon-button" title="History and Export">
                         <i class="fas fa-history"></i>
                         <span class="history-counter" id="history-count">0</span>
@@ -219,7 +286,7 @@
             
             <!-- Upload Button (displayed only when no PDF is uploaded) -->
             <div id="upload-container" class="upload-container">
-                <button id="upload-button" class="upload-button">
+                <button id="upload-button" class="upload-button" onclick="document.getElementById('pdf-upload').click();">
                     <i class="fas fa-file-upload"></i>
                     <span>Upload Textbook</span>
                 </button>
@@ -230,20 +297,32 @@
             <div class="chat-content" id="chat-messages">
                 <div class="chat-bubble system">
                     <div class="bubble-content">
-                        Welcome to Lumo! Upload a textbook to start asking questions about it.
+                        Welcome to Lumo! You can ask questions about available textbooks or upload a new one.
                     </div>
                 </div>
             </div>
             
             <!-- Input Area -->
             <div class="chat-input-area">
-                <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
-                <button id="voice-input-button" class="icon-button" title="Speak your question">
-                    <i class="fas fa-microphone"></i>
-                </button>
-                <button id="send-button" class="icon-button" disabled title="Send message">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
+                <div class="input-container">
+                    <textarea id="user-input" placeholder="Ask a question about the textbook..." rows="1"></textarea>
+                    <div id="input-features">
+                        <button id="voice-input-button" class="feature-button" title="Voice Input">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <span id="web-search-indicator" class="search-indicator" title="Web Search Status">
+                            <i class="fas fa-globe"></i>
+                            <span class="indicator-status">OFF</span>
+                        </span>
+                    </div>
+                    <button id="send-button" class="icon-button" disabled title="Send message">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div id="status-container">
+                    <span id="status-dot"></span>
+                    <span id="status-text">Ready</span>
+                </div>
             </div>
         </div>
         
@@ -277,7 +356,7 @@
                     <h3><i class="fas fa-file-pdf"></i> Textbook</h3>
                     <div id="settings-upload-container">
                         <p class="file-info" id="current-file-text">No file uploaded</p>
-                        <button id="settings-upload-button" class="upload-button">
+                        <button id="settings-upload-button" class="upload-button" onclick="document.getElementById('pdf-upload').click();">
                             <i class="fas fa-file-upload"></i>
                             <span>Upload Textbook</span>
                         </button>
@@ -330,18 +409,17 @@
 
                 <div class="setting-group">
                     <h3><i class="fas fa-globe"></i> Approved Websites</h3>
-                    <div id="websites-container">
-                        <p>Add approved websites for web search. Only content from these sites will be used.</p>
-                        <div class="website-form">
-                            <input type="url" id="website-url" placeholder="Enter website URL" class="input-field">
-                            <input type="text" id="website-name" placeholder="Name (optional)" class="input-field">
-                            <button id="add-website-button" class="action-button">
-                                <i class="fas fa-plus"></i> Add Website
-                            </button>
-                        </div>
-                        <div class="approved-websites-list" id="approved-websites-list">
-                            <p>No approved websites added yet</p>
-                        </div>
+                    <p>These websites are approved for web searches.</p>
+                    <div id="approved-websites-list" class="website-list">
+                        <p class="loading-websites">Loading approved websites...</p>
+                    </div>
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <button id="initialize-websites-btn" class="action-button">
+                            <i class="fas fa-sync"></i> Initialize Approved Websites
+                        </button>
+                        <a href="/websites-page" class="action-button" style="text-decoration: none;">
+                            <i class="fas fa-edit"></i> Manage Websites
+                        </a>
                     </div>
                 </div>
                 
@@ -367,6 +445,17 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <div class="setting-group">
+                    <h3><i class="fas fa-book"></i> Selected Sources</h3>
+                    <p>These textbooks will be used when answering your questions.</p>
+                    <div id="selected-sources-list" class="source-list">
+                        <p class="no-sources">No textbooks selected. Visit the <a href="/books-page">Books page</a> to select sources.</p>
+                    </div>
+                    <a href="/books-page" class="action-button" style="margin-top: 10px; text-decoration: none;">
+                        <i class="fas fa-edit"></i> Manage Sources
+                    </a>
                 </div>
             </div>
         </div>
@@ -551,7 +640,7 @@
             this.style.display = 'none';
         });
 
-        // Web search functionality
+        // Initialize data variables
         let approvedWebsites = {};
         let useTextbooks = true;
         let useWebSearch = false;
@@ -562,6 +651,8 @@
             .then(data => {
                 approvedWebsites = data;
                 updateWebsitesList();
+                // Initialize the web search indicator
+                updateWebSearchIndicator();
             })
             .catch(error => {
                 console.error('Error loading approved websites:', error);
@@ -816,6 +907,9 @@
                 };
             }
             
+            console.log(`Sending query to ${endpoint} with search options: textbooks=${useTextbooks}, web=${useWebSearch}`);
+            console.log(`Request data:`, requestData);
+            
             // Send request to appropriate endpoint
             fetch(endpoint, {
                 method: 'POST',
@@ -830,31 +924,33 @@
                 removeTypingIndicator();
                 
                 if (data.success) {
-                    // Prepare metadata for citation display
-                    const metadata = {
-                        sections: data.sections || [],
-                        pages: data.pages || [],
-                        web_sources: data.web_sources || []
-                    };
+                    // Add AI message
+                    addMessage('assistant', data.answer, {
+                        sections: data.sections,
+                        pages: data.pages,
+                        language: data.language,
+                        webSources: data.web_sources
+                    });
                     
-                    // Add AI response to chat
-                    addMessage('assistant', data.answer, metadata);
+                    // If TTS is enabled, speak the response
+                    if (ttsEnabled) {
+                        speakText(data.answer, data.language);
+                    }
                     
                     // Update status
                     statusText.textContent = 'Ready';
-                    statusDot.style.backgroundColor = '#28a745';
+                    statusDot.style.backgroundColor = '#28a745'; // Green for success
                 } else {
-                    // Add error message
-                    addMessage('error', 'Error: ' + data.error);
+                    // Show error
+                    addMessage('error', data.error || 'An error occurred while processing your request.');
                     
                     // Update status
                     statusText.textContent = 'Error';
-                    statusDot.style.backgroundColor = '#dc3545';
-                    setTimeout(() => {
-                        statusText.textContent = 'Ready';
-                        statusDot.style.backgroundColor = '#28a745';
-                    }, 3000);
+                    statusDot.style.backgroundColor = '#dc3545'; // Red for error
                 }
+                
+                // Scroll to bottom of chat
+                chatMessages.scrollTop = chatMessages.scrollHeight;
             })
             .catch(error => {
                 console.error('Error:', error);
@@ -862,18 +958,120 @@
                 // Remove typing indicator
                 removeTypingIndicator();
                 
-                // Add error message
-                addMessage('error', 'Network error. Please try again.');
+                // Show error
+                addMessage('error', 'Failed to connect to the server. Please try again.');
                 
                 // Update status
                 statusText.textContent = 'Error';
-                statusDot.style.backgroundColor = '#dc3545';
-                setTimeout(() => {
-                    statusText.textContent = 'Ready';
-                    statusDot.style.backgroundColor = '#28a745';
-                }, 3000);
+                statusDot.style.backgroundColor = '#dc3545'; // Red for error
+                
+                // Scroll to bottom of chat
+                chatMessages.scrollTop = chatMessages.scrollHeight;
             });
         };
+
+        // Initialize web search indicator
+        function updateWebSearchIndicator() {
+            const indicator = document.getElementById('web-search-indicator');
+            const statusText = indicator.querySelector('.indicator-status');
+            
+            if (useWebSearch && Object.keys(approvedWebsites).length > 0) {
+                indicator.classList.add('active');
+                statusText.textContent = 'ON';
+            } else {
+                indicator.classList.remove('active');
+                statusText.textContent = 'OFF';
+            }
+        }
+        
+        // Web search indicator click event
+        document.getElementById('web-search-indicator').addEventListener('click', function() {
+            // Only toggle if we have approved websites
+            if (Object.keys(approvedWebsites).length > 0) {
+                webToggle.checked = !webToggle.checked;
+                
+                // Trigger the change event
+                const event = new Event('change');
+                webToggle.dispatchEvent(event);
+            } else {
+                alert('You need to add at least one approved website to use web search. Please add a website in the Approved Websites section.');
+            }
+        });
+        
+        // Update web toggle event listener
+        document.getElementById('web-toggle').addEventListener('change', function() {
+            useWebSearch = this.checked;
+            
+            // Check if we need to disable the send button
+            if (!useWebSearch && !useTextbooks) {
+                document.getElementById('send-button').disabled = true;
+                document.getElementById('user-input').disabled = true;
+            } else if ((useWebSearch && Object.keys(approvedWebsites).length > 0) || 
+                       (useTextbooks && document.getElementById('current-file-text').textContent !== 'No file uploaded')) {
+                document.getElementById('send-button').disabled = false;
+                document.getElementById('user-input').disabled = false;
+            }
+            
+            // If enabling web search but no approved websites, show a message
+            if (useWebSearch && Object.keys(approvedWebsites).length === 0) {
+                alert('You need to add at least one approved website to use web search. Please add a website in the Approved Websites section.');
+                this.checked = false;
+                useWebSearch = false;
+            }
+            
+            // Update the web search indicator
+            updateWebSearchIndicator();
+        });
+
+        // Navigation between panels
+        document.getElementById('nav-settings').addEventListener('click', function() {
+            // Load current source info
+            updateSourcesList();
+            
+            // Show settings panel
+            document.getElementById('settings-panel').classList.add('active');
+            document.getElementById('about-panel').classList.remove('active');
+            document.getElementById('overlay').style.display = 'block';
+            
+            // Update bottom nav
+            document.getElementById('nav-chat').classList.remove('active');
+            document.getElementById('nav-settings').classList.add('active');
+            document.getElementById('nav-info').classList.remove('active');
+        });
+        
+        // Function to fetch and update the selected sources list
+        function updateSourcesList() {
+            fetch('/selected-sources')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const selectedSources = data.selected_sources || [];
+                        const sourcesList = document.getElementById('selected-sources-list');
+                        
+                        if (selectedSources.length === 0) {
+                            sourcesList.innerHTML = '<p class="no-sources">No textbooks selected. Visit the <a href="/books-page">Books page</a> to select sources.</p>';
+                            return;
+                        }
+                        
+                        let html = '';
+                        selectedSources.forEach(source => {
+                            html += `
+                            <div class="source-item">
+                                <div class="source-item-name">${source}</div>
+                                <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                            </div>
+                            `;
+                        });
+                        
+                        sourcesList.innerHTML = html;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading selected sources:', error);
+                    document.getElementById('selected-sources-list').innerHTML = 
+                        '<p class="no-sources">Error loading sources. Please refresh the page.</p>';
+                });
+        }
     </script>
 </body>
 </html>

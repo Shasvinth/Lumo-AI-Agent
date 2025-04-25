@@ -17,6 +17,9 @@ const currentFileInfo = document.getElementById('current-file-info');
 const historyPanel = document.getElementById('history-panel');
 const historyButton = document.getElementById('history-button');
 const closeHistory = document.getElementById('close-history');
+const webSearchIndicator = document.getElementById('web-search-indicator');
+const webToggle = document.getElementById('web-toggle');
+const textbookToggle = document.getElementById('textbook-toggle');
 
 // Toggle functionality
 const toggleSwitch = document.querySelector('.toggle-switch');
@@ -53,6 +56,9 @@ let recognition = null;
 let speechSynthesis = window.speechSynthesis;
 let ttsEnabled = false; // Changed to false by default
 let darkModeEnabled = false;
+let useWebSearch = false;
+let useTextbooks = true; // Default to using textbooks
+let approvedWebsites = {};
 
 // Initialize speech recognition if browser supports it
 function initSpeechRecognition() {
@@ -141,8 +147,14 @@ function speakText(text, language) {
 
 // Event Listeners
 pdfUpload.addEventListener('change', handleFileUpload);
-uploadButton.addEventListener('click', () => pdfUpload.click());
-settingsUploadButton.addEventListener('click', () => pdfUpload.click());
+uploadButton.addEventListener('click', function() {
+    console.log('Upload button clicked');
+    pdfUpload.click();
+});
+settingsUploadButton.addEventListener('click', function() {
+    console.log('Settings upload button clicked');
+    pdfUpload.click();
+});
 userInput.addEventListener('input', handleInput);
 userInput.addEventListener('keydown', handleKeyPress);
 sendButton.addEventListener('click', handleSend);
@@ -436,18 +448,98 @@ function handleSend() {
     // Update status
     updateStatus('Processing...', 'warning');
     isProcessing = true;
+
+    // Fetch both textbook sources and websites in parallel
+    Promise.all([
+        // Get textbook sources
+        fetch('/selected-sources').then(response => response.json()),
+        // Get approved websites
+        fetch('/websites').then(response => response.json())
+    ])
+    .then(([sourcesData, websitesData]) => {
+        // Process textbook sources
+        const selectedSources = sourcesData.success ? sourcesData.selected_sources : [];
+        
+        // Process websites
+        approvedWebsites = websitesData; // Update global approved websites
+        const selectedWebsites = Object.keys(websitesData);
+        
+        console.log(`Fetched ${selectedSources.length} textbook sources and ${selectedWebsites.length} websites`);
+        
+        // Send query with both sources
+        return selectEndpointAndSendQuery(message, selectedSources, selectedWebsites);
+    })
+    .catch(error => {
+        showError(`Error: ${error.message}. Please try again.`);
+        updateStatus('Error', 'error');
+        isProcessing = false;
+        handleInput();
+    });
+}
+
+// Helper function to select the appropriate endpoint and send query
+function selectEndpointAndSendQuery(message, selectedSources, selectedWebsites) {
+    // Determine which endpoint to use based on available sources
+    let endpoint, requestData;
     
-    // Send to backend
-    fetch('/query', {
+    console.log(`Selecting endpoint - useTextbooks: ${useTextbooks}, useWebSearch: ${useWebSearch}`);
+    console.log(`Selected sources: ${selectedSources.length > 0 ? selectedSources.join(', ') : 'none'}`);
+    console.log(`Selected websites: ${selectedWebsites.length > 0 ? selectedWebsites.join(', ') : 'none'}`);
+    
+    // Check if we have any sources available
+    const hasTextbooks = useTextbooks && selectedSources && selectedSources.length > 0;
+    const hasWebsites = useWebSearch && selectedWebsites && selectedWebsites.length > 0;
+    
+    if (!hasTextbooks && !hasWebsites) {
+        // No sources available
+        showError("No sources available. Please enable at least one textbook or website source.");
+        updateStatus('Error', 'error');
+        isProcessing = false;
+        handleInput();
+        return Promise.reject(new Error("No sources available"));
+    }
+    
+    // Always use combined query when possible, regardless of toggle state
+    if (hasTextbooks && hasWebsites) {
+        console.log("Using combined search - both sources available");
+        endpoint = '/combined-query';
+        requestData = {
+            query: message,
+            sources: selectedSources,
+            websites: selectedWebsites,
+            language: languageSelector.value,
+            use_markdown: true
+        };
+    } else if (hasWebsites) {
+        // Web search only
+        console.log("Using web search only - no textbooks available");
+        endpoint = '/web-query';
+        requestData = {
+            query: message,
+            websites: selectedWebsites,
+            language: languageSelector.value,
+            use_markdown: true
+        };
+    } else {
+        // Textbook search only
+        console.log("Using textbook search only - no websites available");
+        endpoint = '/query';
+        requestData = {
+            query: message,
+            sources: selectedSources,
+            language: languageSelector.value,
+            use_markdown: true
+        };
+    }
+    
+    console.log(`Sending request to ${endpoint} with data:`, requestData);
+    
+    return fetch(endpoint, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            query: message,
-            language: languageSelector.value,
-            use_markdown: true // Enable markdown formatting
-        })
+        body: JSON.stringify(requestData)
     })
     .then(response => {
         if (!response.ok) {
@@ -457,12 +549,19 @@ function handleSend() {
     })
     .then(data => {
         if (data.success) {
+            // Fix for web sources that might not have pages property
+            if (data.web_sources && (!data.pages || data.pages.length === 0)) {
+                // Create page references for web sources if missing
+                data.pages = data.web_sources.map(source => `Source: ${source.name}`);
+            }
+            
             // Add assistant message
             addMessage('assistant', data.answer, {
-                sections: data.sections,
-                pages: data.pages,
+                sections: data.sections || [],
+                pages: data.pages || [],
                 language: data.language,
-                format: data.format || 'plain' // Use the format provided by the server
+                format: data.format || 'plain',
+                webSources: data.web_sources
             });
             updateStatus('Ready', 'success');
             
@@ -484,6 +583,72 @@ function handleSend() {
     });
 }
 
+// Helper function to process content into a cohesive answer
+function processContentForUnifiedResponse(content, metadata) {
+    // Remove error messages
+    let cleanedContent = content;
+    
+    // Fix for error messages in web source content
+    if (cleanedContent.includes("Error processing query: 'pages'")) {
+        cleanedContent = cleanedContent.replace(/From .+?:\s*Error processing query: 'pages'/g, "");
+    }
+    
+    // Check if this is a response with multiple sources
+    if (content.match(/^From .+?:/m)) {
+        console.log("Processing multi-source content for unified response");
+        
+        // Extract the sections by source
+        const sourceMatches = content.match(/From ([^:]+):\s*([^]*?)(?=(?:From [^:]+:)|$)/g) || [];
+        
+        // Process each source section
+        const validSourceContents = [];
+        
+        // First pass: extract content from valid sections and identify missing information
+        for (const sourceMatch of sourceMatches) {
+            // Extract source name and content
+            const sourceNameMatch = sourceMatch.match(/From ([^:]+):/);
+            const sourceName = sourceNameMatch ? sourceNameMatch[1].trim() : "Unknown";
+            
+            // Skip if the source has error message or no useful information
+            if (sourceMatch.includes("Error processing query") || 
+                sourceMatch.toLowerCase().includes("does not contain any information") ||
+                sourceMatch.toLowerCase().includes("cannot answer your question") || 
+                sourceMatch.toLowerCase().includes("no information about") ||
+                sourceMatch.toLowerCase().includes("the provided text does not") ||
+                sourceMatch.toLowerCase().includes("this question cannot be answered")) {
+                continue;
+            }
+            
+            // Clean up the content
+            let sourceContent = sourceMatch
+                .replace(/From [^:]+:\s*/, '') // Remove "From source:" prefix
+                .trim()
+                .replace(/^\s*[-•*]\s*/gm, '') // Remove bullet points at beginning of lines
+                .replace(/\n{3,}/g, '\n\n'); // Replace multiple newlines
+            
+            // If content is not empty after cleaning, add it
+            if (sourceContent) {
+                validSourceContents.push({
+                    sourceName: sourceName,
+                    content: sourceContent
+                });
+            }
+        }
+        
+        // If we have valid content, create a unified response
+        if (validSourceContents.length > 0) {
+            // Combine all valid content without source attribution
+            return validSourceContents.map(item => item.content).join("\n\n").trim();
+        } else {
+            // No valid content found
+            return "I couldn't find relevant information about this in the available sources.";
+        }
+    }
+    
+    // If not a multi-source response, return the cleaned content as is
+    return cleanedContent;
+}
+
 function addMessage(type, content, metadata = null) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-bubble ${type}`;
@@ -491,10 +656,13 @@ function addMessage(type, content, metadata = null) {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'bubble-content';
     
-    // Check if the content should be rendered as Markdown (only for assistant messages)
+    // For assistant responses, handle formatting
     if (type === 'assistant') {
-        // Render content as Markdown for all assistant responses
-        contentDiv.innerHTML = md.render(content);
+        // Process content for a unified response
+        const processedContent = processContentForUnifiedResponse(content, metadata);
+        
+        // Render content as Markdown
+        contentDiv.innerHTML = md.render(processedContent);
         contentDiv.classList.add('markdown-content');
     } else {
         // Render as plain text with line breaks
@@ -503,47 +671,39 @@ function addMessage(type, content, metadata = null) {
     
     messageDiv.appendChild(contentDiv);
     
-    // Add metadata (sources, pages, sections)
+    // Add metadata (sources, pages, sections) in a more concise way
     if (metadata) {
         // Create citations container for all references
         const citationsDiv = document.createElement('div');
         citationsDiv.className = 'message-metadata';
         
-        // Add sections and pages references if available
-        let metadataText = '';
-        if (metadata.sections && metadata.sections.length > 0) {
-            metadataText += `Sections: ${Array.isArray(metadata.sections) ? metadata.sections.join(", ") : metadata.sections}`;
-        }
+        // Only show useful sections and pages references
+        let referencesText = '';
         
-        if (metadata.pages && metadata.pages.length > 0) {
-            if (metadataText) metadataText += ' | ';
-            metadataText += `Pages: ${Array.isArray(metadata.pages) ? metadata.pages.join(", ") : metadata.pages}`;
-        }
-        
+        // Add language info if available
         if (metadata.language) {
-            if (metadataText) metadataText += ' | ';
-            metadataText += `Language: ${getLanguageName(metadata.language)}`;
+            referencesText += `Language: ${getLanguageName(metadata.language)}`;
         }
         
-        // Only add the standard metadata div if there's content
-        if (metadataText) {
-            citationsDiv.textContent = metadataText;
+        // Add the references div only if there's useful content
+        if (referencesText) {
+            citationsDiv.textContent = referencesText;
             messageDiv.appendChild(citationsDiv);
         }
         
         // Add web sources if available
-        if (metadata.web_sources && metadata.web_sources.length > 0) {
+        if (metadata.webSources && metadata.webSources.length > 0) {
             const webSourcesDiv = document.createElement('div');
             webSourcesDiv.className = 'web-sources-container';
             
             // Add a heading for web sources
             const sourcesHeading = document.createElement('div');
             sourcesHeading.className = 'sources-heading';
-            sourcesHeading.textContent = 'Web Sources:';
+            sourcesHeading.textContent = 'Sources:';
             webSourcesDiv.appendChild(sourcesHeading);
             
             // Add each web source with a link
-            metadata.web_sources.forEach(source => {
+            metadata.webSources.forEach(source => {
                 const sourceDiv = document.createElement('div');
                 sourceDiv.className = 'web-source';
                 
@@ -592,7 +752,11 @@ function showError(message) {
 
 function enableChat() {
     userInput.disabled = false;
-    userInput.placeholder = `Ask a question about ${currentFile.name}...`;
+    if (currentFile) {
+        userInput.placeholder = `Ask a question about ${currentFile.name}...`;
+    } else {
+        userInput.placeholder = 'Ask a question about the available textbooks...';
+    }
 }
 
 function toggleDarkMode() {
@@ -660,4 +824,276 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize the toggle switch to off state
     updateToggleSwitch();
+    
+    // Initialize web search preference from localStorage or default to false
+    useWebSearch = localStorage.getItem('useWebSearch') === 'true';
+    if (webToggle) {
+        webToggle.checked = useWebSearch;
+    }
+    
+    // Initialize textbook search preference from localStorage or default to true
+    useTextbooks = localStorage.getItem('useTextbooks') !== 'false';
+    if (textbookToggle) {
+        textbookToggle.checked = useTextbooks;
+    }
+    
+    // Check if there are already processed books in the system
+    checkExistingBooks();
+    
+    // Load approved websites
+    fetch('/websites')
+        .then(response => response.json())
+        .then(websites => {
+            approvedWebsites = websites;
+            console.log("Initialized approved websites:", Object.keys(approvedWebsites));
+            updateWebSearchIndicator();
+        })
+        .catch(error => {
+            console.error('Error loading websites:', error);
+        });
 });
+
+// Function to check if there are already processed books in the system
+function checkExistingBooks() {
+    fetch('/books')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Checking for existing books:', data);
+            if (data.success && data.books && data.books.length > 0) {
+                // There are already processed books in the system
+                enableChatWithExistingBooks(data.books);
+                
+                // Update the status to show books are loaded from saved data
+                updateStatus('Ready - Loaded from saved data', 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Error checking existing books:', error);
+        });
+}
+
+// Function to enable chat with existing books
+function enableChatWithExistingBooks(books) {
+    if (!currentFile) {  // Only enable if no file has been uploaded in this session
+        console.log('Enabling chat with existing books');
+        
+        // Create a list of book names with selection status
+        const selectedBooks = books.filter(book => book.selected);
+        const bookList = selectedBooks.length > 0 ? 
+            selectedBooks.map(book => book.name).join(', ') : 
+            books.map(book => book.name).join(', ');
+        
+        // Create message about selection
+        let message = '';
+        if (selectedBooks.length > 0 && selectedBooks.length < books.length) {
+            message = `The following selected textbooks are available: ${selectedBooks.map(book => book.name).join(', ')}`;
+            message += `\n\nThere are ${books.length - selectedBooks.length} additional books available in the database.`;
+            message += ` You can manage book selections in the Books page.`;
+        } else {
+            message = `The following textbooks are available: ${bookList}`;
+        }
+        
+        // Enable the chat input
+        userInput.disabled = false;
+        userInput.placeholder = 'Ask a question about the available textbooks...';
+        
+        // Update history count
+        document.getElementById('history-count').textContent = "0";
+        
+        // Add a message to inform the user
+        addMessage('system', message);
+    }
+}
+
+// Navigation between panels
+document.getElementById('nav-settings').addEventListener('click', function() {
+    // Load current source info
+    updateSourcesList();
+    
+    // Load approved websites
+    loadApprovedWebsites();
+    
+    // Show settings panel
+    document.getElementById('settings-panel').classList.add('active');
+    document.getElementById('about-panel').classList.remove('active');
+    document.getElementById('overlay').style.display = 'block';
+    
+    // Update bottom nav
+    document.getElementById('nav-chat').classList.remove('active');
+    document.getElementById('nav-settings').classList.add('active');
+    document.getElementById('nav-info').classList.remove('active');
+});
+
+// Function to load approved websites
+function loadApprovedWebsites() {
+    const websitesList = document.getElementById('approved-websites-list');
+    websitesList.innerHTML = '<p class="loading-websites">Loading approved websites...</p>';
+    
+    fetch('/websites')
+        .then(response => response.json())
+        .then(websites => {
+            if (Object.keys(websites).length === 0) {
+                websitesList.innerHTML = '<p>No approved websites configured.</p>';
+                return;
+            }
+            
+            let html = '';
+            Object.values(websites).forEach(website => {
+                html += `
+                <div class="website-item">
+                    <div class="website-info">
+                        <div class="website-name">${website.name}</div>
+                        <div class="website-url">${website.url}</div>
+                    </div>
+                </div>
+                `;
+            });
+            
+            websitesList.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading websites:', error);
+            websitesList.innerHTML = '<p>Error loading websites. Please refresh.</p>';
+        });
+        
+    // Add event listener for initialize websites button
+    const initButton = document.getElementById('initialize-websites-btn');
+    if (initButton) {
+        initButton.addEventListener('click', initializeApprovedWebsites);
+    }
+}
+
+// Function to initialize approved websites
+function initializeApprovedWebsites() {
+    const initButton = document.getElementById('initialize-websites-btn');
+    const websitesList = document.getElementById('approved-websites-list');
+    
+    // Disable button and show loading
+    initButton.disabled = true;
+    initButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Initializing...';
+    websitesList.innerHTML = '<p>Initializing approved websites... This may take several minutes.</p>';
+    
+    // Call the API to initialize websites
+    fetch('/initialize-websites', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            addMessage('system', data.message);
+            
+            // Re-enable button
+            initButton.disabled = false;
+            initButton.innerHTML = '<i class="fas fa-sync"></i> Initialize Approved Websites';
+            
+            // Reload websites list
+            loadApprovedWebsites();
+        } else {
+            throw new Error(data.error || 'Failed to initialize websites');
+        }
+    })
+    .catch(error => {
+        console.error('Error initializing websites:', error);
+        websitesList.innerHTML = `<p>Error: ${error.message}</p>`;
+        
+        // Re-enable button
+        initButton.disabled = false;
+        initButton.innerHTML = '<i class="fas fa-sync"></i> Initialize Approved Websites';
+    });
+}
+
+// Initialize web search indicator
+function updateWebSearchIndicator() {
+    const indicator = document.getElementById('web-search-indicator');
+    if (!indicator) return; // Safety check
+    
+    const statusText = indicator.querySelector('.indicator-status');
+    
+    if (useWebSearch && (approvedWebsites && Object.keys(approvedWebsites).length > 0)) {
+        indicator.classList.add('active');
+        statusText.textContent = 'ON';
+        console.log("Web search indicator set to ON");
+    } else {
+        indicator.classList.remove('active');
+        statusText.textContent = 'OFF';
+        console.log("Web search indicator set to OFF");
+    }
+    
+    // Update the web toggle checkbox to match
+    if (webToggle) {
+        webToggle.checked = useWebSearch;
+    }
+}
+
+// Web search indicator click event
+document.getElementById('web-search-indicator').addEventListener('click', function() {
+    // Only toggle if we have approved websites
+    if (approvedWebsites && Object.keys(approvedWebsites).length > 0) {
+        // Toggle the useWebSearch state directly
+        useWebSearch = !useWebSearch;
+        
+        // Save preference to localStorage
+        localStorage.setItem('useWebSearch', useWebSearch ? 'true' : 'false');
+        
+        // Update the checkbox
+        if (webToggle) {
+            webToggle.checked = useWebSearch;
+        }
+        
+        // Update the indicator
+        updateWebSearchIndicator();
+        console.log("Web search toggled via indicator:", useWebSearch);
+    } else {
+        alert('You need to add at least one approved website to use web search. Please add a website in the Approved Websites section.');
+    }
+});
+
+// Add web toggle event listener after initializing all the DOM elements
+if (webToggle) {
+    webToggle.addEventListener('change', function() {
+        useWebSearch = this.checked;
+        // Save preference to localStorage
+        localStorage.setItem('useWebSearch', useWebSearch ? 'true' : 'false');
+        
+        updateWebSearchIndicator();
+        console.log("Web search toggled:", useWebSearch);
+
+        // If enabling web search but no approved websites, fetch them
+        if (useWebSearch && (!approvedWebsites || Object.keys(approvedWebsites).length === 0)) {
+            fetch('/websites')
+                .then(response => response.json())
+                .then(websites => {
+                    approvedWebsites = websites;
+                    console.log("Loaded approved websites:", Object.keys(approvedWebsites));
+                    
+                    // If no websites are approved, show warning and disable web search
+                    if (Object.keys(approvedWebsites).length === 0) {
+                        alert('You need to add at least one approved website to use web search. Please add a website in the Approved Websites section.');
+                        this.checked = false;
+                        useWebSearch = false;
+                        localStorage.setItem('useWebSearch', 'false');
+                        updateWebSearchIndicator();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading websites:', error);
+                    alert('Error loading approved websites');
+                    this.checked = false;
+                    useWebSearch = false;
+                    localStorage.setItem('useWebSearch', 'false');
+                    updateWebSearchIndicator();
+                });
+        }
+    });
+}
+
+// Add textbook toggle event listener
+if (textbookToggle) {
+    textbookToggle.addEventListener('change', function() {
+        useTextbooks = this.checked;
+        // Save preference to localStorage
+        localStorage.setItem('useTextbooks', useTextbooks ? 'true' : 'false');
+        console.log("Textbook search toggled:", useTextbooks);
+    });
+}

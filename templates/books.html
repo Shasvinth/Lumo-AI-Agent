@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumo - Processed Books</title>
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .books-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .books-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .books-title {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .action-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: 500;
+        }
+        
+        .action-button:hover {
+            background-color: #0056b3;
+        }
+        
+        .back-button {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            text-decoration: none;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        
+        .books-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .book-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background-color: var(--card-bg);
+        }
+        
+        .book-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .book-header {
+            padding: 15px;
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .book-name {
+            margin: 0;
+            font-size: 1.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .book-content {
+            padding: 15px;
+        }
+        
+        .book-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .meta-label {
+            color: var(--text-secondary);
+        }
+        
+        .meta-value {
+            font-weight: 500;
+        }
+        
+        .no-books {
+            text-align: center;
+            padding: 40px;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            border: 1px dashed var(--border-color);
+        }
+        
+        .no-books i {
+            font-size: 3rem;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+        }
+        
+        .no-books h3 {
+            margin: 0 0 10px;
+            color: var(--text-color);
+        }
+        
+        .no-books p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+        
+        .book-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .source-select {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .source-checkbox {
+            margin-right: 5px;
+        }
+        
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 12px 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.5s;
+        }
+        
+        .success-message i {
+            font-size: 1.2rem;
+        }
+        
+        .success-message p {
+            margin: 0;
+        }
+        
+        .success-message.fade-out {
+            animation: fadeOut 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary-color);
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .error-message i {
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="books-container">
+        <div class="books-header">
+            <h1 class="books-title">Processed Books</h1>
+            <div class="header-actions">
+                <button id="save-selections" class="action-button">
+                    <i class="fas fa-save"></i>
+                    Save Selections
+                </button>
+                <a href="/" class="back-button">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Home
+                </a>
+            </div>
+        </div>
+        
+        <div id="books-content">
+            <!-- Content will be loaded via JavaScript -->
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading books...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Fetch books data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchBooks();
+            
+            // Add event listener for book page file upload
+            const bookPageFileUpload = document.getElementById('book-page-pdf-upload');
+            if (bookPageFileUpload) {
+                bookPageFileUpload.addEventListener('change', function(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    if (file.type !== 'application/pdf') {
+                        showError('Please upload a PDF file');
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // Show loading message
+                    const booksContent = document.getElementById('books-content');
+                    booksContent.innerHTML = `
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <p>Uploading and processing PDF...</p>
+                        </div>
+                    `;
+                    
+                    // Upload file
+                    fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Upload response:', data);
+                        if (data.success) {
+                            showMessage('PDF processed successfully!');
+                            // Reload books list
+                            fetchBooks();
+                        } else {
+                            throw new Error(data.error || 'Failed to process PDF');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Upload error:', error);
+                        showError(error.message || 'An error occurred during upload');
+                    });
+                });
+            }
+        });
+        
+        let selectedSources = [];
+        
+        // Function to fetch books from the API
+        function fetchBooks() {
+            console.log('Fetching books...');
+            
+            // First, get the selected sources from localStorage or from API
+            fetch('/selected-sources')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Selected sources response:', data);
+                    if (data.success) {
+                        selectedSources = data.selected_sources || [];
+                        console.log('Selected sources:', selectedSources);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading selected sources:', error);
+                    // Try from localStorage as fallback
+                    const saved = localStorage.getItem('selectedSources');
+                    if (saved) {
+                        selectedSources = JSON.parse(saved);
+                        console.log('Loaded selected sources from localStorage:', selectedSources);
+                    }
+                })
+                .finally(() => {
+                    console.log('Now fetching all books...');
+                    // Then fetch all books
+                    fetch('/books')
+                        .then(response => {
+                            console.log('Books API response status:', response.status);
+                            return response.json();
+                        })
+                        .then(data => {
+                            console.log('Books data:', data);
+                            if (data.success) {
+                                // Mark selected books
+                                const books = data.books.map(book => ({
+                                    ...book,
+                                    selected: selectedSources.includes(book.name)
+                                }));
+                                console.log('Books with selection status:', books);
+                                displayBooks(books);
+                            } else {
+                                console.error('Error from API:', data.error);
+                                showError(data.error || 'Failed to load books');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error fetching books:', error);
+                            showError('Error connecting to server: ' + error.message);
+                        });
+                });
+        }
+        
+        // Function to display books
+        function displayBooks(books) {
+            const booksContent = document.getElementById('books-content');
+            
+            if (books.length === 0) {
+                booksContent.innerHTML = `
+                    <div class="no-books">
+                        <i class="fas fa-book"></i>
+                        <h3>No Books Found</h3>
+                        <p>Upload a textbook to get started.</p>
+                        <div style="margin-top: 20px;">
+                            <input type="file" id="book-page-pdf-upload" accept=".pdf" style="display: none;" />
+                            <button onclick="document.getElementById('book-page-pdf-upload').click();" class="action-button">
+                                <i class="fas fa-file-upload"></i> Upload Textbook
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Show a persistence message
+            showMessage('Loaded books from persistent storage. Your selections will be saved automatically.');
+            
+            let booksHTML = '<div class="books-list">';
+            
+            books.forEach(book => {
+                booksHTML += `
+                    <div class="book-card">
+                        <div class="book-header">
+                            <h3 class="book-name">${book.name}</h3>
+                        </div>
+                        <div class="book-content">
+                            <div class="book-meta">
+                                <div class="meta-item">
+                                    <i class="fas fa-cubes"></i>
+                                    <span class="meta-label">Chunks:</span>
+                                    <span class="meta-value">${book.chunk_count}</span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="fas fa-calendar-alt"></i>
+                                    <span class="meta-label">Processed:</span>
+                                    <span class="meta-value">${book.processed_date}</span>
+                                </div>
+                            </div>
+                            <div class="book-actions">
+                                <label class="source-select">
+                                    <input type="checkbox" class="source-checkbox" data-source="${book.name}" ${book.selected ? 'checked' : ''}>
+                                    <span>Use for queries</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            booksHTML += '</div>';
+            booksContent.innerHTML = booksHTML;
+            
+            // Add event listeners to checkboxes
+            document.querySelectorAll('.source-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const sourceName = this.getAttribute('data-source');
+                    if (this.checked) {
+                        if (!selectedSources.includes(sourceName)) {
+                            selectedSources.push(sourceName);
+                        }
+                    } else {
+                        const index = selectedSources.indexOf(sourceName);
+                        if (index !== -1) {
+                            selectedSources.splice(index, 1);
+                        }
+                    }
+                });
+            });
+            
+            // Add event listener to save button
+            document.getElementById('save-selections').addEventListener('click', saveSelections);
+        }
+        
+        // Function to save selections
+        function saveSelections() {
+            // Display saving status
+            const booksContent = document.getElementById('books-content');
+            const saveButton = document.getElementById('save-selections');
+            
+            saveButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            saveButton.disabled = true;
+            
+            console.log('Saving selected sources:', selectedSources);
+            
+            // Save to API
+            fetch('/save-sources', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    selected_sources: selectedSources
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Save response:', data);
+                saveButton.innerHTML = '<i class="fas fa-save"></i> Save Selections';
+                saveButton.disabled = false;
+                
+                if (data.success) {
+                    // Save to localStorage as backup
+                    localStorage.setItem('selectedSources', JSON.stringify(selectedSources));
+                    
+                    // Show success message with persistence status
+                    let message = 'Your selections have been saved. These sources will be used for all queries.';
+                    if (data.persistent !== undefined) {
+                        message += data.persistent ? 
+                            ' Changes will persist when the server restarts.' : 
+                            ' Note: There was an issue saving to disk - selections may not persist if server restarts.';
+                    }
+                    
+                    showMessage(message);
+                } else {
+                    showError(data.error || 'Failed to save selections');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving selections:', error);
+                showError('Error connecting to server: ' + error.message);
+                
+                // Still save to localStorage
+                localStorage.setItem('selectedSources', JSON.stringify(selectedSources));
+                
+                saveButton.innerHTML = '<i class="fas fa-save"></i> Save Selections';
+                saveButton.disabled = false;
+            });
+        }
+        
+        // Function to show success message
+        function showMessage(message) {
+            const booksContainer = document.querySelector('.books-container');
+            
+            // Create message element
+            const messageElement = document.createElement('div');
+            messageElement.className = 'success-message';
+            messageElement.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <p>${message}</p>
+            `;
+            
+            // Add to container
+            booksContainer.insertBefore(messageElement, booksContainer.firstChild);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                messageElement.classList.add('fade-out');
+                setTimeout(() => {
+                    messageElement.remove();
+                }, 500);
+            }, 3000);
+        }
+        
+        // Function to show error message
+        function showError(message) {
+            const booksContent = document.getElementById('books-content');
+            booksContent.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html> 

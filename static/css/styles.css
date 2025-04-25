@@ -378,30 +378,48 @@ body {
     z-index: 5;
 }
 
+/* Input container styles */
+.input-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    border-radius: 20px;
+    background-color: var(--input-bg);
+    padding: 8px 12px;
+    margin-bottom: 5px;
+}
+
 #user-input {
     flex: 1;
-    min-height: 44px;
-    max-height: 120px;
-    padding: 10px 16px;
-    border-radius: 22px;
-    border: 1px solid var(--glass-border);
-    background: var(--input-bg);
-    color: var(--text-color);
-    font-size: 0.95rem;
     resize: none;
-    transition: border-color var(--transition-speed) ease;
-    backdrop-filter: blur(var(--backdrop-blur));
-    -webkit-backdrop-filter: blur(var(--backdrop-blur));
+    border: none;
+    background: transparent;
+    padding: 8px;
+    font-size: 1rem;
+    color: var(--text-color);
+    max-height: 120px;
+    overflow-y: auto;
     outline: none;
 }
 
-#user-input:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+#input-features {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
 }
 
-#user-input::placeholder {
-    color: var(--muted-text);
+.feature-button {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 5px;
+    margin-right: 8px;
+}
+
+.feature-button:hover {
+    color: var(--primary-color);
 }
 
 /* Icon Buttons */
@@ -1095,4 +1113,52 @@ input:disabled + .toggle-switch {
     .nav-item span {
         font-size: 0.7rem;
     }
+}
+
+/* Web search indicator */
+.search-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background-color: #e5e7eb;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    margin-right: 8px;
+    transition: all 0.2s ease;
+}
+
+.search-indicator i {
+    color: #666;
+}
+
+.search-indicator.active {
+    background-color: var(--primary-color);
+}
+
+.search-indicator.active i,
+.search-indicator.active .indicator-status {
+    color: white;
+}
+
+.input-features {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.feature-button {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 5px;
+    margin-right: 8px;
+}
+
+.feature-button:hover {
+    color: var(--primary-color);
 }

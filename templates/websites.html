@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumo - Approved Websites</title>
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="/static/images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .websites-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .websites-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .websites-title {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .action-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: 500;
+        }
+        
+        .action-button:hover {
+            background-color: #0056b3;
+        }
+        
+        .back-button {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            text-decoration: none;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        
+        .websites-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .website-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            background-color: var(--card-bg);
+        }
+        
+        .website-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .website-header {
+            padding: 15px;
+            background-color: var(--primary-color);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .website-name {
+            margin: 0;
+            font-size: 1.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+        
+        .website-content {
+            padding: 15px;
+        }
+        
+        .website-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .meta-label {
+            color: var(--text-secondary);
+            min-width: 70px;
+        }
+        
+        .meta-value {
+            font-weight: 500;
+            word-break: break-all;
+        }
+        
+        .website-url {
+            text-decoration: none;
+            color: var(--primary-color);
+        }
+        
+        .website-url:hover {
+            text-decoration: underline;
+        }
+        
+        .website-actions {
+            margin-top: 15px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        
+        .delete-button {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 10px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .delete-button:hover {
+            background-color: #bd2130;
+        }
+        
+        .no-websites {
+            text-align: center;
+            padding: 40px;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            border: 1px dashed var(--border-color);
+        }
+        
+        .no-websites i {
+            font-size: 3rem;
+            color: var(--text-secondary);
+            margin-bottom: 15px;
+        }
+        
+        .no-websites h3 {
+            margin: 0 0 10px;
+            color: var(--text-color);
+        }
+        
+        .no-websites p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+        
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 12px 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.5s;
+        }
+        
+        .success-message i {
+            font-size: 1.2rem;
+        }
+        
+        .success-message p {
+            margin: 0;
+        }
+        
+        .success-message.fade-out {
+            animation: fadeOut 0.5s;
+        }
+        
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .error-message i {
+            font-size: 1.5rem;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary-color);
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="websites-container">
+        <div class="websites-header">
+            <h1 class="websites-title">Approved Websites</h1>
+            <div class="header-actions">
+                <button id="initialize-all-btn" class="action-button">
+                    <i class="fas fa-sync"></i> Initialize All Websites
+                </button>
+                <a href="/" class="back-button">
+                    <i class="fas fa-arrow-left"></i>
+                    Back to Home
+                </a>
+            </div>
+        </div>
+        
+        <div id="websites-content">
+            <!-- Content will be loaded via JavaScript -->
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading approved websites...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Fetch websites data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchWebsites();
+            
+            // Add event listener for initialize button
+            const initButton = document.getElementById('initialize-all-btn');
+            if (initButton) {
+                initButton.addEventListener('click', initializeAllWebsites);
+            }
+        });
+        
+        // Function to fetch websites from the API
+        function fetchWebsites() {
+            const websitesContent = document.getElementById('websites-content');
+            websitesContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading approved websites...</p>
+                </div>
+            `;
+            
+            fetch('/websites')
+                .then(response => response.json())
+                .then(websites => {
+                    if (Object.keys(websites).length === 0) {
+                        websitesContent.innerHTML = `
+                            <div class="no-websites">
+                                <i class="fas fa-globe"></i>
+                                <h3>No Approved Websites</h3>
+                                <p>Initialize the approved websites to enable web searches.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    let websitesHTML = '<div class="websites-list">';
+                    
+                    Object.values(websites).forEach(website => {
+                        websitesHTML += `
+                            <div class="website-card">
+                                <div class="website-header">
+                                    <h3 class="website-name">${website.name}</h3>
+                                </div>
+                                <div class="website-content">
+                                    <div class="website-meta">
+                                        <div class="meta-item">
+                                            <span class="meta-label">URL:</span>
+                                            <span class="meta-value">
+                                                <a href="${website.url}" target="_blank" class="website-url">${website.url}</a>
+                                            </span>
+                                        </div>
+                                        <div class="meta-item">
+                                            <span class="meta-label">Chunks:</span>
+                                            <span class="meta-value">${website.chunk_count}</span>
+                                        </div>
+                                        <div class="meta-item">
+                                            <span class="meta-label">Added:</span>
+                                            <span class="meta-value">${website.added_on || 'Unknown'}</span>
+                                        </div>
+                                    </div>
+                                    <div class="website-actions">
+                                        <button class="delete-button" onclick="deleteWebsite('${website.name}')">
+                                            <i class="fas fa-trash"></i> Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    websitesHTML += '</div>';
+                    websitesContent.innerHTML = websitesHTML;
+                })
+                .catch(error => {
+                    console.error('Error fetching websites:', error);
+                    websitesContent.innerHTML = `
+                        <div class="error-message">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Error connecting to server: ${error.message}</p>
+                        </div>
+                    `;
+                });
+        }
+        
+        // Function to initialize all websites
+        function initializeAllWebsites() {
+            const initButton = document.getElementById('initialize-all-btn');
+            const websitesContent = document.getElementById('websites-content');
+            
+            // Disable button and show loading
+            initButton.disabled = true;
+            initButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Initializing...';
+            
+            // Show loading message
+            websitesContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Initializing approved websites... This may take several minutes.</p>
+                </div>
+            `;
+            
+            // Call the API to initialize websites
+            fetch('/initialize-websites', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showMessage(data.message);
+                    
+                    // Re-enable button
+                    initButton.disabled = false;
+                    initButton.innerHTML = '<i class="fas fa-sync"></i> Initialize All Websites';
+                    
+                    // Reload websites list
+                    fetchWebsites();
+                } else {
+                    throw new Error(data.error || 'Failed to initialize websites');
+                }
+            })
+            .catch(error => {
+                console.error('Error initializing websites:', error);
+                
+                // Show error message
+                websitesContent.innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+                
+                // Re-enable button
+                initButton.disabled = false;
+                initButton.innerHTML = '<i class="fas fa-sync"></i> Initialize All Websites';
+            });
+        }
+        
+        // Function to delete a website
+        function deleteWebsite(name) {
+            if (confirm(`Are you sure you want to remove the website "${name}"?`)) {
+                fetch(`/websites/${name}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(`Website "${name}" removed successfully`);
+                        fetchWebsites();
+                    } else {
+                        throw new Error(data.error || 'Failed to remove website');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error removing website:', error);
+                    showError(`Error removing website: ${error.message}`);
+                });
+            }
+        }
+        
+        // Function to show success message
+        function showMessage(message) {
+            const websitesContainer = document.querySelector('.websites-container');
+            
+            // Create message element
+            const messageElement = document.createElement('div');
+            messageElement.className = 'success-message';
+            messageElement.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <p>${message}</p>
+            `;
+            
+            // Add to container
+            websitesContainer.insertBefore(messageElement, websitesContainer.firstChild);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                messageElement.classList.add('fade-out');
+                setTimeout(() => {
+                    messageElement.remove();
+                }, 500);
+            }, 3000);
+        }
+        
+        // Function to show error message
+        function showError(message) {
+            const websitesContainer = document.querySelector('.websites-container');
+            
+            // Create message element
+            const errorElement = document.createElement('div');
+            errorElement.className = 'error-message';
+            errorElement.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>${message}</p>
+            `;
+            
+            // Add to container
+            websitesContainer.insertBefore(errorElement, websitesContainer.firstChild);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                errorElement.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html> 
