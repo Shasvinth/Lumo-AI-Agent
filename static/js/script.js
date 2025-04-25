@@ -905,6 +905,42 @@ function enableChatWithExistingBooks(books) {
     }
 }
 
+// Function to update sources list
+function updateSourcesList() {
+    const sourcesList = document.getElementById('selected-sources-list');
+    if (!sourcesList) return; // Safety check
+    
+    fetch('/selected-sources')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const selectedSources = data.selected_sources || [];
+                
+                if (selectedSources.length === 0) {
+                    sourcesList.innerHTML = '<p class="no-sources">No textbooks selected. Visit the <a href="/books-page">Books page</a> to select sources.</p>';
+                    return;
+                }
+                
+                let html = '';
+                selectedSources.forEach(source => {
+                    html += `
+                    <div class="source-item">
+                        <div class="source-item-name">${source}</div>
+                        <i class="fas fa-check-circle" style="color: #28a745;"></i>
+                    </div>
+                    `;
+                });
+                
+                sourcesList.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading selected sources:', error);
+            sourcesList.innerHTML = 
+                '<p class="no-sources">Error loading sources. Please refresh the page.</p>';
+        });
+}
+
 // Navigation between panels
 document.getElementById('nav-settings').addEventListener('click', function() {
     // Load current source info
